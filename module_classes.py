@@ -287,7 +287,7 @@ class Pion(Piece):
 
 def liste_pieces(couleur):
     c=couleur
-    return [Tour(c,1),Cavalier(c,1),Fou(c,1),Dame(c),Roi(c),Fou(c,2),Cavalier(c,2),Tour(c,2)]
+    return [Tour(c),Cavalier(c),Fou(c),Dame(c),Roi(c),Fou(c),Cavalier(c),Tour(c)]
 
 
 #CLASSE ECHIQUIER                                                                        #####################################
@@ -303,8 +303,8 @@ class Echiquier(list):
         for piece in Lb:
             self[7].append(piece)
         for k in range(1,9):
-            self[1].append(Pion('n',k))
-            self[6].append(Pion('b', k))
+            self[1].append(Pion('n'))
+            self[6].append(Pion('b'))
             self[2].append(None)
             self[3].append(None)
             self[4].append(None)
