@@ -5,7 +5,7 @@ def echec(J,E):
     return Roi(J.couleur).est_menacee(E)
 
 
-
+profondeur_max=5
 
 
 def jeu_echec(J,Jadv):
