@@ -1,5 +1,8 @@
 import numpy as np
-profondeur_max=100
+
+from module_classes import *
+
+profondeur_max=5
 
 def heuristique(E,J):
     """
@@ -50,8 +53,8 @@ def heuristique(E,J):
                         h-=900
                 if type(piece)==Roi:
                     h+=0
-    
-    #Ajustements dynamiques
+
+    #Con
 
 
 
@@ -70,36 +73,30 @@ def resultat_coup(E, piece, pos_finale):
     E[k][l] = None
     return E
 
-def minimax(E,J,profondeur_courante,profondeur_max,heuristique):
-    if profondeur_courante%2==1:
-        coups_possibles_J = coups_possibles(J, E)
-        recompense=-np.inf
-        coup_a_retenir=None
-        for piece,pos_finale in coups_possibles_J:
-            h=heuristique(resultat_coup(E,piece,pos_finale),J)
-            if h>recompense:
-                recompense=h
-                coup_a_retenir=piece,pos_finale
+def minmax(E,J,profondeur_courante,profondeur_max,heuristique):
+    if profondeur_courante>=profondeur_max:
+        return None,heuristique(E,J)
     else:
         if profondeur_courante % 2 == 1:
             recompense_finale = -np.inf
-            coup_a_retenir = None, None
+            coup_a_retenir = None
             for piece, pos_finale in coups_possibles(J, E):
-                enchainement_coups, recompense = minmax(resultat_coup(E, piece, pos_finale), J,
+                recompense = minmax(resultat_coup(E, piece, pos_finale), J,
                                                          profondeur_courante + 1, profondeur_max)
-                if recompense > recompense_finale:
+                if recompense_finale < recompense:
                     recompense_finale = recompense
                     coup_a_retenir = piece, pos_finale
         else:
             recompense_finale = np.inf
-            coup_a_retenir = None, None
+            coup_a_retenir = None
             for piece, pos_finale in coups_possibles(J.adv(), E):
-                enchainement_coups, recompense = minmax(resultat_coup(E, piece, pos_finale), J,
+                recompense = minmax(resultat_coup(E, piece, pos_finale), J,
                                                          profondeur_courante + 1, profondeur_max)
                 if recompense < recompense_finale:
                     recompense_finale = recompense
                     coup_a_retenir = piece, pos_finale
-        return [coup_a_retenir] + enchainement_coups, recompense_finale
+        return coup_a_retenir, recompense_finale
+
 
 def alpha_beta(E,J,profondeur_courante,profondeur_max,heuristique,alpha=-np.inf,beta=np.inf,est_maximisant=True):
     """
