@@ -1,5 +1,8 @@
 import numpy as np
-profondeur_max=100
+
+from module_classes import *
+
+profondeur_max=5
 
 def heuristique(E,J):
     """
@@ -50,9 +53,49 @@ def heuristique(E,J):
                         h-=900
                 if type(piece)==Roi:
                     h+=0
-    
-    #Ajustements dynamiques
 
+    #Con
+
+                if piece.couleur==c:
+                    i,j=piece.position(E)
+    #Bonus pour le nombre de coups légaux
+                    h+=len(cases_accessibles(piece,E))
+    # Contrôle du centre
+                    if (i,j) in [(4, 3), (4, 4), (3, 3), (3, 4)]:
+                        h += 100
+    #Pions au bord pénalisés
+                    if type(piece)==Pion:
+                        if j in [0,8]:
+                            h-=100
+    #bonus pour les pions connectés ou qui se défendent
+                        for k,l in [(i-1,j-1),(i+1,j+1),(i,j-1),(i,j+1),(i-1,j+1),(i+1,j-1)]:
+                            try:
+                                if type(E[k][l])==piece:
+                                h+=100
+                            except IndexError:
+                                pass
+    #malus pour les pions doublés
+                        for k,l in [(i-1,j),(i+1,j)]:
+                            try:
+                                if type(E[k][l])==piece:
+                                h-=100
+                            except IndexError:
+                                pass
+    #Bonus pour les pions passés
+                        if (c=='n' and i==7 and E[i+1][j]==None) or (c=='b' and i==1 and E[i-1][j]==None):
+                            h+=100
+    #Malus pour les fous bloqués par les pions de la même couleur
+                    if type(piece)==Fou:
+                        for k,l in [(i-1,j-1),(i+1,j+1),(i+1,j-1),(i-1,j+1)]:
+                            try:
+                                if E[k][l].couleur==c:
+                                h-=50
+                            except IndexError:
+                                pass
+    #Bonus pour un roi roqué
+                    if type(piece)==Roi:
+                        if (c=='n' and (i,j) in [(0,6),(0,2)]) or (c=='b' and (i,j) in [(7,6),(7,2)]):
+                            h+=100
 
 
 def coups_possibles(J,E):
@@ -70,36 +113,30 @@ def resultat_coup(E, piece, pos_finale):
     E[k][l] = None
     return E
 
-def minimax(E,J,profondeur_courante,profondeur_max,heuristique):
-    if profondeur_courante%2==1:
-        coups_possibles_J = coups_possibles(J, E)
-        recompense=-np.inf
-        coup_a_retenir=None
-        for piece,pos_finale in coups_possibles_J:
-            h=heuristique(resultat_coup(E,piece,pos_finale),J)
-            if h>recompense:
-                recompense=h
-                coup_a_retenir=piece,pos_finale
+def minmax(E,J,profondeur_courante,profondeur_max,heuristique):
+    if profondeur_courante>=profondeur_max:
+        return None,heuristique(E,J)
     else:
         if profondeur_courante % 2 == 1:
             recompense_finale = -np.inf
-            coup_a_retenir = None, None
+            coup_a_retenir = None
             for piece, pos_finale in coups_possibles(J, E):
-                enchainement_coups, recompense = minmax(resultat_coup(E, piece, pos_finale), J,
+                recompense = minmax(resultat_coup(E, piece, pos_finale), J,
                                                          profondeur_courante + 1, profondeur_max)
-                if recompense > recompense_finale:
+                if recompense_finale < recompense:
                     recompense_finale = recompense
                     coup_a_retenir = piece, pos_finale
         else:
             recompense_finale = np.inf
-            coup_a_retenir = None, None
+            coup_a_retenir = None
             for piece, pos_finale in coups_possibles(J.adv(), E):
-                enchainement_coups, recompense = minmax(resultat_coup(E, piece, pos_finale), J,
+                recompense = minmax(resultat_coup(E, piece, pos_finale), J,
                                                          profondeur_courante + 1, profondeur_max)
                 if recompense < recompense_finale:
                     recompense_finale = recompense
                     coup_a_retenir = piece, pos_finale
-        return [coup_a_retenir] + enchainement_coups, recompense_finale
+        return coup_a_retenir, recompense_finale
+
 
 def alpha_beta(E,J,profondeur_courante,profondeur_max,heuristique,alpha=-np.inf,beta=np.inf,est_maximisant=True):
     """

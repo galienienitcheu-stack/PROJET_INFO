@@ -1,5 +1,5 @@
 ## IMPORTATIONS                                                         ################################################
-import numpy as np
+from abc import ABC, abstractmethod
 
 
 # dictionnaire de correspondance entre les lignes sur l'échiquier et les lignes dans le tableau numpy modélisant l'échiquier
@@ -18,10 +18,10 @@ class Joueur(object):
         """
         self.couleur=couleur
 
-    def symb(self):
+    def __repr__(self):
         return self.couleur
 
-    def adversaire(self):
+    def adv(self):
         if self.couleur=='n':
             return Joueur('b')
         return Joueur('n')
@@ -37,8 +37,8 @@ class Joueur(object):
 
 
 #CLASSE PIECE                                                           ################################################
-class Piece(object):
-    def __init__(self,couleur:str,num:int):
+class Piece(metaclass=ABCMeta):
+    def __init__(self,couleur:str):
         """
         Créé une pièce.
 
@@ -51,7 +51,6 @@ class Piece(object):
             niveau de santé maximal de l'animal. Vaut 20 par défaut.
         """
         self.couleur=couleur
-        self.num=num
 
     def position(self, E):
         """
@@ -123,7 +122,7 @@ class Piece(object):
 
 # Classe Tour
 class Tour(Piece):
-    def symb(self):
+    def __repr__(self):
         return "T"+self.couleur
     def cases_accesibles(self, E):
         L=[]
@@ -143,7 +142,7 @@ class Tour(Piece):
 
 #CLASSE CAVALIER                                                                    ####################################
 class Cavalier(Piece):
-    def symb(self):
+    def __repr__(self):
         return "C"+self.couleur
 
     def cases_accesibles(self, E):
@@ -159,7 +158,7 @@ class Cavalier(Piece):
         return L
 #CLASSE FOU                                                                        #####################################
 class Fou(Piece):
-    def symb(self):
+    def __repr__(self):
         return "F"+self.couleur
     def cases_accesibles(self,E):
         L=[]
@@ -177,10 +176,7 @@ class Fou(Piece):
 
 #CLASSE DAME                                                                       #####################################
 class Dame(Piece):
-    def __init__(self,couleur):
-        super().__init__(couleur,num=1)
-
-    def symb(self):
+    def __repr__(self):
         return "D"+self.couleur
 
     def cases_accesibles(self,E):
@@ -212,9 +208,7 @@ class Dame(Piece):
 
 #CLASSE ROI                                                                        #####################################
 class Roi(Piece):
-    def __init__(self,couleur):
-        super().__init__(couleur, num=1)
-    def symb(self):
+    def __repr__(self):
         return "R"+self.couleur
     def cases_accesibles(self, E):
         L=[]
@@ -231,8 +225,8 @@ class Roi(Piece):
 
 #CLASSE PION                                                                       #####################################
 class Pion(Piece):
-    def symb(self):
-        return "P",self.num,self.couleur
+    def __repr__(self):
+        return "P",self.couleur
 
     def cases_accessibles(self, E):
         L=[]
