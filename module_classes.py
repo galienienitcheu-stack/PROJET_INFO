@@ -1,5 +1,6 @@
-## IMPORTATIONS                                                         ################################################
-from abc import ABC, abstractmethod
+#IMPORTATIONS ################################################
+from abc import ABCMeta
+#ABC, abstractmethod
 
 
 # dictionnaire de correspondance entre les lignes sur l'échiquier et les lignes dans le tableau numpy modélisant l'échiquier
@@ -58,16 +59,36 @@ class Piece(metaclass=ABCMeta):
 
         Paramètres
         ----------
-        pos: tuple
-            Les coordonnées auxquelles l'animal sera créé.
-
-        capacité: int
-            niveau de santé maximal de l'animal. Vaut 20 par défaut.
         """
         for i in range(8):
             for j in range(8):
                 if E[i][j]==self:
                     return i,j
+        return None
+    def colonne(self,E):
+        """
+                Renvoie la colonne d'une pièce sur un échiquier.
+
+                Paramètres
+                ----------
+                """
+        alphabet = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
+        for i in range(8):
+            for j in range(8):
+                if E[i][j]==self:
+                    return alphabet[j]
+        return None
+    def ligne(self,E):
+        """
+                        Renvoie la ligne d'une pièce sur un échiquier.
+
+                        Paramètres
+                        ----------
+                        """
+        for i in range(8):
+            for j in range(8):
+                if E[i][j]==self:
+                    return i
         return None
 
     def est_menacee(self, E):
@@ -87,15 +108,15 @@ class Piece(metaclass=ABCMeta):
         """
         posi=self.position(E)
         L=[]
-        Jadv=Joueur(self.couleur).adversaire()
+        Jadv=Joueur(self.couleur).adv()
         for p in Jadv.pieces_vivantes(E):
             if posi in p.cases_accesibles(E):
                 L.append(p)
-        return L.vide()
+        #return L.vide()
 
 
     def prendre(self,p,E):
-        Jadv=Joueur(self.couleur).adversaire()
+        Jadv=Joueur(self.couleur).adv()
         Jadv.pieces_vivantes(E).remove(p)
         E.coup(self,p.position(E))
 
@@ -124,18 +145,20 @@ class Piece(metaclass=ABCMeta):
 class Tour(Piece):
     def __repr__(self):
         return "T"+self.couleur
+    def type(self):
+        return "T"
     def cases_accesibles(self, E):
         L=[]
         i,j=self.position(E)
         for k in range(-7,8):
             try:
                 L.append([i+k,j])
-                a=E[i + k][j]
+                #a=E[i + k][j]
             except IndexError:
                 pass
             try:
                 L.append([i,j+k])
-                a=E[i][j + k]
+                #a=E[i][j + k]
             except IndexError:
                 pass
         return L
@@ -144,7 +167,8 @@ class Tour(Piece):
 class Cavalier(Piece):
     def __repr__(self):
         return "C"+self.couleur
-
+    def __str__(self):
+        return "C"
     def cases_accesibles(self, E):
         L=[]
         i,j=self.position(E)
@@ -160,6 +184,8 @@ class Cavalier(Piece):
 class Fou(Piece):
     def __repr__(self):
         return "F"+self.couleur
+    def __str__(self):
+        return "F"
     def cases_accesibles(self,E):
         L=[]
         i,j=self.position(E)
@@ -178,28 +204,30 @@ class Fou(Piece):
 class Dame(Piece):
     def __repr__(self):
         return "D"+self.couleur
+    def __str__(self):
+        return "D"
 
     def cases_accesibles(self,E):
         L=[]
         i,j=self.position(E)
         for k in range(-7,8):
             try:
-                if E[i+k][j+k]==None:
+                if E[i+k][j+k] is None:
                     L.append([i+k,j+k])
             except IndexError:
                 pass
             try:
-                if E[i-k][j+k]==None:
+                if E[i-k][j+k] is None:
                     L.append([i-k,j+k])
             except IndexError:
                 pass
             try:
-                if E[i+k][j]==None:
+                if E[i+k][j] is None:
                     L.append([i+k,j])
             except IndexError:
                 pass
             try:
-                if E[i][j+k]==None:
+                if E[i][j+k] is None:
                     L.append([i,j+k])
             except IndexError:
                 pass
@@ -210,13 +238,15 @@ class Dame(Piece):
 class Roi(Piece):
     def __repr__(self):
         return "R"+self.couleur
+    def __str__(self):
+        return "R"
     def cases_accesibles(self, E):
         L=[]
         i,j=self.position(E)
         aux=[(i+1,j),(i-1,j),(i+1,j+1),(i,j+1),(i,j-1),(i-1,j-1),(i+1,j-1),(i-1,j+1)]
         for k,l in aux:
             try:
-                if E[k][l]==None:
+                if E[k][l] is None:
                     L.append([k,l])
             except IndexError:
                 pass
@@ -226,52 +256,54 @@ class Roi(Piece):
 #CLASSE PION                                                                       #####################################
 class Pion(Piece):
     def __repr__(self):
-        return "P",self.couleur
+        return "P"+self.couleur
+    def __str__(self):
+        return ""
 
     def cases_accessibles(self, E):
         L=[]
         i,j=self.position(E)
         if self.couleur=='n':
             try:
-                if E[i-1][j]==None:
+                if E[i-1][j] is None:
                     L = [(i - 1, j)]
             except IndexError:
                 pass
             if self.position(E)[1]==self.position(E())[1]:
                 try:
-                    if E[i-2][j]==None:
+                    if E[i-2][j] is None:
                         L.append((i-2,j))
                 except IndexError:
                     pass
             try:
-                if E[i - 1][j - 1]!=None:
+                if E[i - 1][j - 1] is not None:
                     L.append((i-1,j-1))
             except IndexError:
                 pass
             try:
-                if E[i - 1][j + 1]!=None:
+                if E[i - 1][j + 1] is not None:
                     L.append((i-1,j+1))
             except IndexError:
                 pass
         else:
             try:
-                if E[i+1][j]==None:
+                if E[i+1][j] is None:
                     L = [(i+1,j)]
             except IndexError:
                 pass
             if self.position(E)[1]==self.position(E())[1]:
                 try:
-                    if E[i+2][j]==None:
+                    if E[i+2][j] is None:
                         L.append((i+2,j))
                 except IndexError:
                     pass
             try:
-                if E[i + 1][j - 1]!=None:
+                if E[i + 1][j - 1] is not None:
                    L.append((i+1,j-1))
             except IndexError:
                 pass
             try:
-                if E[i + 1][j + 1]!=None:
+                if E[i + 1][j + 1] is not None:
                     L.append((i+11,j+1))
             except IndexError:
                 pass
