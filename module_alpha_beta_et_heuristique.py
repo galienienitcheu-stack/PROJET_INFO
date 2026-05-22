@@ -1,6 +1,5 @@
-import numpy as np
-
-from module_classes import *
+from classe_Piece_et_filles_et_joueur import *
+from chess import *
 
 profondeur_max=5
 
@@ -22,7 +21,8 @@ def heuristique(E,J):
         """
     h=0
     c=J.couleur
-    # évaluation du matériel en centipion
+    nb_fou=0
+    # déséquilibre du matériel en centipion
     for liste in E:
         for piece in liste:
             if piece!=None:
@@ -39,6 +39,7 @@ def heuristique(E,J):
                 if type(piece)==Fou:
                     if piece.couleur==c:
                         h+=300
+                        nb_fou+=1
                     else:
                         h-=300
                 if type(piece)==Tour:
@@ -54,12 +55,12 @@ def heuristique(E,J):
                 if type(piece)==Roi:
                     h+=0
 
-    #Con
+
 
                 if piece.couleur==c:
                     i,j=piece.position(E)
     #Bonus pour le nombre de coups légaux
-                    h+=len(cases_accessibles(piece,E))
+                    h+=len(piece.cases_accessibles(E))
     # Contrôle du centre
                     if (i,j) in [(4, 3), (4, 4), (3, 3), (3, 4)]:
                         h += 100
@@ -70,25 +71,25 @@ def heuristique(E,J):
     #bonus pour les pions connectés ou qui se défendent
                         for k,l in [(i-1,j-1),(i+1,j+1),(i,j-1),(i,j+1),(i-1,j+1),(i+1,j-1)]:
                             try:
-                                if type(E[k][l])==piece:
+                                if type(E[k,l])==piece:
                                 h+=100
                             except IndexError:
                                 pass
     #malus pour les pions doublés
                         for k,l in [(i-1,j),(i+1,j)]:
                             try:
-                                if type(E[k][l])==piece:
+                                if type(E[k,l])==piece:
                                 h-=100
                             except IndexError:
                                 pass
     #Bonus pour les pions passés
-                        if (c=='n' and i==7 and E[i+1][j]==None) or (c=='b' and i==1 and E[i-1][j]==None):
+                        if (c=='n' and i==7 and E[i+1,j]==None) or (c=='b' and i==1 and E[i-1,j]==None):
                             h+=100
     #Malus pour les fous bloqués par les pions de la même couleur
                     if type(piece)==Fou:
                         for k,l in [(i-1,j-1),(i+1,j+1),(i+1,j-1),(i-1,j+1)]:
                             try:
-                                if E[k][l].couleur==c:
+                                if E[k,l].couleur==c:
                                 h-=50
                             except IndexError:
                                 pass
@@ -97,6 +98,11 @@ def heuristique(E,J):
                         if (c=='n' and (i,j) in [(0,6),(0,2)]) or (c=='b' and (i,j) in [(7,6),(7,2)]):
                             h+=100
 
+
+    #Bonus pour les paires de fous
+    if nb_fou==2:
+        h+=50
+    return h
 
 def coups_possibles(J,E):
     L=[]
@@ -109,8 +115,8 @@ def coups_possibles(J,E):
 def resultat_coup(E, piece, pos_finale):
     k, l = piece.position(E)
     i, j = pos_finale
-    E[i][j] = piece
-    E[k][l] = None
+    E[i,j] = piece
+    E[k,l] = None
     return E
 
 def minmax(E,J,profondeur_courante,profondeur_max,heuristique):
@@ -121,7 +127,7 @@ def minmax(E,J,profondeur_courante,profondeur_max,heuristique):
             recompense_finale = -np.inf
             coup_a_retenir = None
             for piece, pos_finale in coups_possibles(J, E):
-                recompense = minmax(resultat_coup(E, piece, pos_finale), J,
+                coup,recompense = minmax(resultat_coup(E, piece, pos_finale), J,
                                                          profondeur_courante + 1, profondeur_max)
                 if recompense_finale < recompense:
                     recompense_finale = recompense
@@ -138,7 +144,7 @@ def minmax(E,J,profondeur_courante,profondeur_max,heuristique):
         return coup_a_retenir, recompense_finale
 
 
-def alpha_beta(E,J,profondeur_courante,profondeur_max,heuristique,alpha=-np.inf,beta=np.inf,est_maximisant=True):
+def alpha_beta(E,J,profondeur_courante,profondeur_max,heuristique,alpha=-np.inf,beta=np.inf):
     """
     Implémentation de l'algorithme Alpha-Bêta pour les échecs.
 
@@ -158,60 +164,33 @@ def alpha_beta(E,J,profondeur_courante,profondeur_max,heuristique,alpha=-np.inf,
             - score: Score heuristique associé.
     """
     if profondeur_courante>=profondeur_max:
-        return [],heuristique(E,J)
+        return None,heuristique(E,J)
     else:
         if profondeur_courante % 2 == 1:
-            alpha = -np.inf
-            config_possibles=[]
+            recompense_retenue,coup_retenu=-np.inf,None
             for piece, pos_finale in coups_possibles(J, E):
-                config_possibles.append(resultat_coup(E, piece, pos_finale))
-            premiere_config=config_possibles[0]
-            mini=np.inf
-            for piece, pos_finale in coups_possibles(J.adv(), premiere_config):
-                configuration = resultat_coup(premiere_config, piece, pos_finale)
-                recompense=alpha_beta(configuration,J,profondeur_courante+2,profondeur_max,heuristique)
-                if recompense<mini:
-                    mini=recompense
-            alpha=mini
-            for config in config_possibles[1:]:
-                i=0
-                mini=np.inf
-                piece, pos_finale = coups_possibles(J.adv(), config)[i]
-                configuration = resultat_coup(config, piece, pos_finale)
-                recompense = alpha_beta(configuration, J, profondeur_courante + 2, profondeur_max, heuristique)
-                while recompense<mini and recompense>alpha and i<len(coups_possibles(J.adv(), config)):
-                    mini=recompense
-                    i += 1
-                    piece, pos_finale=coups_possibles(J.adv(), config)[i]
-                    configuration=resultat_coup(config, piece, pos_finale)
-                    recompense=alpha_beta(configuration,J,profondeur_courante+2,profondeur_max,heuristique)
-                alpha=max(alpha,recompense)
+                nouvelle_config=resultat_coup(E, piece, pos_finale)
+                coup,recompense=alpha_beta(nouvelle_config,J,profondeur_courante+1,profondeur_max,heuristique,alpha,beta)
+                if recompense_retenue<recompense:
+                    recompense_retenue=recompense
+                    coup_retenu=coup
+                    if recompense_retenue>=beta:
+                        break
+                if recompense>alpha:
+                    alpha=recompense
         if profondeur_courante % 2 == 0:
-            beta = np.inf
-            config_possibles=[]
-            for piece, pos_finale in coups_possibles(J.adv(), E):
-                config_possibles.append(resultat_coup(E, piece, pos_finale))
-            premiere_config=config_possibles[0]
-            maxi=-np.inf
-            for piece, pos_finale in coups_possibles(J, premiere_config):
-                configuration = resultat_coup(premiere_config, piece, pos_finale)
-                recompense=alpha_beta(configuration,J,profondeur_courante+2,profondeur_max,heuristique)
-                if recompense>maxi:
-                    maxi=recompense
-            beta=maxi
-            for config in config_possibles[1:]:
-                i=0
-                maxi=np.inf
-                piece, pos_finale = coups_possibles(J, config)[i]
-                configuration = resultat_coup(config, piece, pos_finale)
-                recompense = alpha_beta(configuration, J, profondeur_courante + 2, profondeur_max, heuristique)
-                while recompense>maxi and recompense<beta and i<len(coups_possibles(J.adv(), config)):
-                    maxi=recompense
-                    i += 1
-                    piece, pos_finale=coups_possibles(J.adv(), config)[i]
-                    configuration=resultat_coup(config, piece, pos_finale)
-                    recompense=alpha_beta(configuration,J,profondeur_courante+2,profondeur_max,heuristique)
-                beta=min(beta,recompense)
+            recompense_retenue,coup_retenu=np.inf,None
+            for piece, pos_finale in coups_possibles(J, E):
+                nouvelle_config=resultat_coup(E, piece, pos_finale)
+                coup,recompense=alpha_beta(nouvelle_config,J,profondeur_courante+1,profondeur_max,heuristique,alpha,beta)
+                if recompense_retenue>recompense:
+                    recompense_retenue=recompense
+                    coup_retenu=coup
+                    if recompense_retenue<=alpha:
+                        break
+                if recompense<beta:
+                    beta=recompense
+        return coup_retenu,recompense_retenue
 
 
 

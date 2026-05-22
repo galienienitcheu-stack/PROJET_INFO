@@ -1,6 +1,7 @@
-from module_alpha_beta_et_heuristique import resultat_coup
-from module_classes import *
-import module_alpha_beta_et_heuristique
+from module_alpha_beta_et_heuristique import *
+from classe_Piece_et_filles_et_joueur import *
+from chess import *
+
 
 def echec(J,E):
     return Roi(J.couleur).est_menacee(E)
@@ -13,7 +14,7 @@ boucle=True
 while boucle:
     try:
         c= input("Choisis ta couleur. 'n' pour noir et 'b' pour blanc:  ")
-        if J not in ["n", "b"]:
+        if c not in ["n", "b"]:
             raise ValueError("Erreur")
     except ValueError:
         print("Saisir une entrée correcte")
@@ -24,8 +25,8 @@ J=Joueur(c)
 ia=J.adv()
 
 
-def jeu_echec(J,ia):
-    E=Echiquier()
+def jeu_echec(self,J,ia):
+    E=self.board
     print("C'est parti!")
     J,Jadv= J * (J == 'b') + ia * (J == 'n'), J * (J == 'n') + ia * (J == 'b')
     L_adv=Jadv.pieces_vivantes()
@@ -34,14 +35,17 @@ def jeu_echec(J,ia):
     match_nul = False
     while not echec(J,E) and not match_nul:
         if J==ia:
-            enchainement, recompense = minimax(E, J, 1, profondeur_max, heuristique)
+            enchainement, recompense = self.minmax(E, J, 1, profondeur_max, self.heuristique)
             piece_jouee,sa_position_finale = enchainement[0]
-            E = resultat_coup(piece_jouee,sa_position_finale)
-
-        if recompense==-module_alpha_beta_et_heuristique.np.inf:
+            E = self.resultat_coup(piece_jouee,sa_position_finale)
+            self.update_ui_board(E)
+            J=Jadv
+        if recompense==-np.inf:
             print("Il y a pat, MATCH  NUL")
-        if echec(J.adv(),E):
-        print("Echec et mat! Fin de la partie")
+        if self.echec(J.adv(),E):
+            print("Echec et mat! Fin de la partie")
+            break
+
 
 
 
