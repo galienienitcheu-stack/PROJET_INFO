@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from typing import Any
 
 # Form implementation generated from reading ui file 'chess.ui'
 #
@@ -11,8 +12,10 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
 from functools import partial
 from classe_Piece_et_filles_et_joueur import *
+from classe_Piece_et_filles_et_joueur import Joueur
 
 
+# Interface de jeu
 class Ui_Jeu_d_echecs(object):
     def setupUi(self, Jeu_d_echecs):
         # Configuration de la fenêtre principale
@@ -101,7 +104,7 @@ class Ui_Jeu_d_echecs(object):
 
 
 
-
+    # Pour la traduction en d'autres langues (pas obligatoire)
     def retranslateUi(self, Jeu_d_echecs):
         _translate = QtCore.QCoreApplication.translate
         Jeu_d_echecs.setWindowTitle(_translate("Jeu_d_echecs", "Jeu d\'échecs"))
@@ -123,26 +126,27 @@ Pieces_blanches=[T1b,C1b,F1b,Db,Rb,F2b,C2b,T2b]
 [P1b,P2b,P3b,P4b,P5b,P6b,P7b,P8b]=[Pion('b') for _ in range(8)]
 Pions_blancs=[P1b,P2b,P3b,P4b,P5b,P6b,P7b,P8b]
 [P1n,P2n,P3n,P4n,P5n,P6n,P7n,P8n]=[Pion('n') for _ in range(8)]
-Pions_noires=[P1n,P2n,P3n,P4n,P5n,P6n,P7n,P8n]
-
-correspondance_piece = {T1b: "♖", T2b: "♖", C1b: "♘", C2b: "♘", F1b: "♗", F2b: "♗", Db: "♕", Rb: "♔",
-                        P1b: "♙", P2b: "♙", P3b: "♙", P4b: "♙", P5b: "♙", P6b: "♙", P7b: "♙", P8b: "♙", T1n: "♜",
-                        T2n: "♜", C1n: "♞", C2n: "♞", F1n: "♝", F2n: "♝", Dn: "♛",
-                        Rn: "♚", P1n: "♟", P2n: "♟", P3n: "♟", P4n: "♟", P5n: "♟", P6n: "♟", P7n: "♟", P8n: "♟"}
+Pions_noirs=[P1n,P2n,P3n,P4n,P5n,P6n,P7n,P8n]
 
 
 
 
 
-class ChessGame(QMainWindow, Ui_Jeu_d_echecs):
+# Implémentation d'une partie de jeu
+
+class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe créée hérite de deux classes mères
+
     def __init__(self):
         super().__init__()
         self.setupUi(self)
         self.selected_piece = None
-        self.board = []
+        self.board = []   #représente l'échiquier et contient toutes les pièces vivantes
         self.current_player = Joueur('b')
         self.setup_board()
         self.move_history = []
+        self.current_player.pieces_vivantes(self.board)=Pieces_blanches+Pions_blancs
+        self.current_player.adv().pieces_vivantes(self.board)=Pieces_noires+Pions_noirs
+
 
 
     def setup_board(self):
@@ -155,7 +159,7 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):
         for piece in Lb:
             self.board[7].append(piece)
         for k in range(1,9):
-            self.board[1].append(Pions_noires[k])
+            self.board[1].append(Pions_noirs[k])
             self.board[6].append(Pions_blancs[k])
             self.board[2].append(None)
             self.board[3].append(None)
@@ -163,16 +167,15 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):
             self.board[5].append(None)
 
             #mise en forme de l'échiquier dans l'interface
-        pieces = {
-            (0, 0): "♜", (0, 1): "♞", (0, 2): "♝", (0, 3): "♛", (0, 4): "♚", (0, 5): "♝", (0, 6): "♞", (0, 7): "♜",
-            (1, 0): "♟", (1, 1): "♟", (1, 2): "♟", (1, 3): "♟", (1, 4): "♟", (1, 5): "♟", (1, 6): "♟", (1, 7): "♟",
-            # Pions noirs
-            (6, 0): "♙", (6, 1): "♙", (6, 2): "♙", (6, 3): "♙", (6, 4): "♙", (6, 5): "♙", (6, 6): "♙", (6, 7): "♙",
-            (7, 0): "♖", (7, 1): "♘", (7, 2): "♗", (7, 3): "♕", (7, 4): "♔", (7, 5): "♗", (7, 6): "♘", (7, 7): "♖"
-        }   # Pions blancs
+        positions_initiales = {
+            T1n: (0, 0), C1n: (0, 1), F1n: (0, 2), Dn: (0, 3), Rn: (0, 4), F2n: (0, 5), C2n: (0, 6), T2n: (0, 7),
+            P1n: (1, 0), P2n: (1, 1), P3n: (1, 2), P4n: (1, 3), P5n: (1, 4), P6n: (1, 5), P7n: (1, 6), P8n: (1, 7),
+            P1b: (6, 0), P2b: (6, 1), P3b: (6, 2), P4b: (6, 3), P5b: (6, 4), P6b: (6, 5), P7b: (6, 6), P8b: (6, 7),
+            T1b: (7, 0), C1b: (7, 1), F1b: (7, 2), Db: (7, 3), Rb: (7, 4), F2b: (7, 5), C2b: (7, 6), T2b: (7, 7)
+        }
 
-        for (row, col), piece in pieces.items():
-            button = self.findChild(QtWidgets.QPushButton, f"{chr(65 + row)}{8-col}")
+        for piece,(row, col) in positions_initiales.items():
+            button = self.findChild(QtWidgets.QPushButton, f"{chr(97+ row)}{8-col}")
             if button:
                 button.setText(piece)
                 button.setStyleSheet("font-size: 24px;")
@@ -180,13 +183,13 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):
 
 
 
-    def is_piece_from_current_player(self, piece):
+    def is_piece_from_current_player(self, piece: Piece) :
         # Vérifie si la pièce appartient au joueur actuel
         return self.current_player.couleur==piece.couleur
 
     def on_case_clicked(self, row, col):
-        if self.selected_piece is None: #Premier clic
-            # Sélectionne une pièce si la case contient une pièce du joueur actuel
+        if self.selected_piece is None: #Premier clic (sur une case)
+            # Sélectionne la pièce cliquée si la case contient une pièce du joueur actuel
             piece = self.board[row][col]
             if piece and self.is_piece_from_current_player(piece):
                 self.selected_piece = (row, col)
@@ -197,17 +200,17 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):
                 # for r,c in piece.cases_accessibles(self.board):
                 #     button = self.findChild(QtWidgets.QPushButton, f"{chr(65 + r)}{8-c}")
                 #     button.setStyleSheet("border-color: yellow; font-size: 24px;")
-        else: #deuxième clic
+        else: #deuxième clic (sur une autre case)
             # Déplace la pièce sélectionnée vers la case cliquée
             self.move_piece(self.selected_piece[0], self.selected_piece[1], row, col)
 
-
+    #code du jeu
     def start_game(self):
         while not self.echec_et_mat(self.current_player) and not match_nul(self.current_player):
             if self.current_player == ia:  # Tour de l'IA
                 self.ia_move()
             else:
-                pass
+                pass    #l'ordinateur attend que l'utilisateur joue
         if match_nul(self.current_player):
             print("Il y a pat, MATCH  NUL")
         if self.echec_et_mat(self.current_player):
@@ -227,13 +230,13 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):
 
     def isvalid_move(self, from_row, from_col, to_row, to_col):
         # Vérifie si le mouvement est valide
-        piece = self.board[from_row][from_col]
-        if piece is None:
+        piece = self.board[from_row][from_col]  #récupère la pièce à la position de départ (s'il en a une)
+        if piece is None:                       #s'il n'y a aucune pièce à cette position on renvoie False
             return False
-        if (to_row,to_col) in piece.cases_accessibles(self.board):
-            if not self.echec(self.current_player):
+        if (to_row,to_col) in piece.cases_accessibles(self.board):  #on regarde si la position finale est accessible par la pièce
+            if not self.echec(self.current_player):      #si le joueur courant n'est pas en echec on retourne True
                 return True
-            else:
+            else:                                        #sinon on se rassure que ce coup lui permet de sortir de l'échec
                 aux=self.board[to_row][to_col]
                 self.board[to_row][to_col] = piece
                 answer=not(self.echec(self.current_player))
@@ -242,67 +245,89 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):
         return False
 
     def move_piece(self, from_row, from_col, to_row, to_col):
+        """
+
+        :param from_row:
+        :param from_col:
+        :param to_row:
+        :param to_col:
+        :return:
+        """
         # Vérifie si le mouvement est valide (simplifié)
-        if not self.is_valid_move(from_row, from_col, to_row, to_col):
-            return
+        if not self.is_valid_move(from_row, from_col, to_row, to_col): #si le coup (de l'utilisateur forcément car l'ia fait des coups valides) n'est pas valide,
+            return                                                     # on ne fait rien
 
         # Déplace la pièce sur le tableau
         piece = self.board[from_row][from_col]  #récupère la piece dans le tableau
         self.board[from_row][from_col] = None   #la position précédente de la pièce n'a plus de pièce
-        aux=self.board[to_row][to_col]          #on récupère la piece qui est dans la position finale de "piece" si elle existe et on l'enlève de la liste des pièces vivantes de l'adversaire
+        aux=self.board[to_row][to_col]          #on récupère la piece qui est dans la position finale (s'il en a une)
         self.board[to_row][to_col] = piece
         if aux!=None:
-            self.current_player.adv().pieces_vivantes(self.board).remove(aux)
+            self.current_player.adv().pieces_vivantes(self.board).remove(aux) #et on l'enlève de la liste des pièces vivantes de l'adversaire
 
-        # Met à jour l'interface
+        # Met à jour l'interface (précisément les cases de départ et d'arrivée de la pièce en jeu)
         from_button = self.findChild(QtWidgets.QPushButton, f"{chr(97 + from_row)}{8-from_col}")
         to_button = self.findChild(QtWidgets.QPushButton, f"{chr(97 + to_row)}{8-to_col}")
 
         from_button.setText("")
         to_button.setText(piece)
 
-        move_notation=self.notation_move(piece, to_row, to_col,aux)
+        move_notation=self.notation_move(piece, to_row, to_col,aux)  #on recupère la notation du coup
 
-        add_move_to_history(self, move_notation)
+        add_move_to_history(self, move_notation) #et on l'entre dans l'historique des coups
 
 
         # Change de joueur
         self.current_player = ia if self.current_player == ia.adv() else ia.adv()
 
-        self.selected_piece = None
-        self.reset_highlight()  # Réinitialise la surbrillance
-        to_button.setStyleSheet("background-color: yellow; font-size: 24px;")
-        if self.echec(self.current_player):
+        self.selected_piece = None #plus aucune pièce n'est sélectionnée
+        self.reset_highlight()  # Réinitialise la surbrillance des cases de l'échiquier
+        to_button.setStyleSheet("background-color: yellow; font-size: 24px;")  #la case d'arrivée est en surbrillance
+        if self.echec(self.current_player):     #si le joueur est en échec
             row,col=Rn.position(self.board) if self.current_player.couleur=='n' else Rb.position(self.board)
             button = self.findChild(QtWidgets.QPushButton, f"{chr(97 + row)}{8 - col}")
-            button.setStyleSheet("background-color: red; font-size: 24px;")
+            button.setStyleSheet("background-color: red; font-size: 24px;")    #on met en surbrillance la case de son roi
 
 
-        if self.current_player==ia:
-            self.start_game()
+        if self.current_player==ia:   #si c'est au tour de l'ia
+            self.start_game()         #on rappelle la fonction start_game
 
     def notation_move(self,piece, to_row, to_col,aux):
-        nota=['','','']
+        nota=['','','']            #représente les différents symboles à ajouter en cas de prise, fin d'une partie, promotion,...
         if self.echec(self.current_player.adv()):
             nota[2]='+'
         if aux!=None:
             nota[1]='x'
         if self.echec_et_mat(self.current_player.adv()):
             nota[2]='#'
-        if self.petit_roque(self.current_player):
+        if self.petit_roque(self.current_player):  #petit et grand roque à coder
             nota[0]='0-0'
         if self.grand_roque(self.current_player):
             nota[0]='0-0-0'
+        if type(piece)==Pion :
+            if piece.couleur=='n' and piece.position(self.board)[0]==7:
+                piece=Dn
+                nota[2]='=D'
+            elif piece.couleur=='b' and piece.position(self.board)[0]==0:
+                piece=Db
+
             #rajouter la promotion
-        if type(piece)==Pion:
-            return f'{nota[0]}{nota[1]}{chr(97 + row)}{8 - col}{nota[2]}'
+        if type(piece) != Pion:
+            return f'{nota[0]}{piece}{nota[1]}{chr(97 + row)}{8 - col}{nota[2]}'   #notation pour les pions
         else:
-            return f'{nota[0]}{correspondance_piece[piece]}{nota[1]}{chr(97 + row)}{8 - col}{nota[2]}'
+            return f'{nota[0]}{nota[1]}{chr(97 + row)}{8 - col}{nota[2]}'          #motation pour les autres pièces
 
     def add_move_to_history(self, move_notation):
         """Ajoute un coup à l'historique et au QListWidget."""
-        self.move_history.append(move_notation)
-        self.listWidget.addItem(move_notation)
+        self.move_history.append(move_notation)    #ajouter le mouvement à l'historique des coups
+        self.listWidget.addItem(move_notation)     #mettre à jour l'interface
+
+    def petit_roque(self,J):
+        pass
+    def grand_roque(self,J):
+        pass
+    def promotion(self,piece):
+        pass
 
     def echec_et_mat(self, J):
         return self.echec(J) and Roi(J.couleur).cases_accesibles(self.board) == []
@@ -312,7 +337,7 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):
             L=Pieces_noires
         else:
             L=Pieces_blanches
-        return not self.echec(J) and all([piece.cases_accesibles(self.board) == [] for piece in J.pieces_vivantes(self.board)]
+        return not self.echec(J) and all([piece.cases_accesibles(self.board) == [] for piece in J.pieces_vivantes(self.board)])
 
 
     def ia_move(self):
@@ -436,18 +461,18 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):
     def coups_possibles(self,J):
         E=self.board
         L = []
-        for piece in J.pieces_vivantes(E):
-            for pos in piece.cases_accesibles(E):
-                L.append((piece, pos))
+        for piece in J.pieces_vivantes(E):   #pour chaque pièce vivante du joueur J
+            for pos in piece.cases_accesibles(E):    #pour chaque position accessible par cette pièce
+                L.append((piece, pos))          #on rajoute le coup (piece,position finale de la pièce)
         return L
 
     def resultat_coup(self, piece, pos_finale):
-        E=self.board
-        k, l = piece.position(E)
-        i, j = pos_finale
-        E[i][j] = piece
+        E=self.board   #fait une copie de l'échiquier sur E, dont ne le modifie pas réelement, mais modifie sa copie
+        k, l = piece.position(E)   #position actuelle de la pièce
+        i, j = pos_finale          #sa position finale
+        E[i][j] = piece            #modifie l'échiquier en faisant le coup
         E[k][l] = None
-        return E
+        return E                   #retourne le résultat du coup
 
 
     def alpha_beta(self, J, profondeur_courante=1, alpha=-np.inf, beta=np.inf):
@@ -473,19 +498,19 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):
         if profondeur_courante >= profondeur_max:
             return None, self.heuristique(E, J)
         else:
-            if profondeur_courante % 2 == 1:
+            if profondeur_courante % 2 == 1:         #si c'est à J (l'IA) de jouer
                 recompense_retenue, coup_retenu = -np.inf, None
-                for piece, pos_finale in self.coups_possibles(J):
-                    nouvelle_config = self.resultat_coup(piece, pos_finale)
-                    coup, recompense = self.alpha_beta(nouvelle_config, J, profondeur_courante + 1, alpha, beta)
+                for piece, pos_finale in self.coups_possibles(J):   #pour chaque coup possible
+                    nouvelle_config = self.resultat_coup(piece, pos_finale)   #on récupère la configuration après coup
+                    coup, recompense = self.alpha_beta(nouvelle_config, J, profondeur_courante + 1, alpha, beta)  #on appelle récursivement alpha_beta pour obtenir le meilleur coup à effectuer dans la nouvelle configuration et la récompense assosié
                     if recompense_retenue < recompense:
                         recompense_retenue = recompense
-                        coup_retenu = coup
-                        if recompense_retenue >= beta:
-                            break
+                        coup_retenu = coup   #on retient le coup dont la recompense est maximale
+                        if recompense_retenue >= beta:  #le maximum des récompenses retenues pour chaque coup ne doit pas exéceder beta donc
+                            break       #si pour ce coup on a recompense_retenue >= beta, alors on s'arrête là, sans regarder les autres coups (travail inutile)
                     if recompense > alpha:
-                        alpha = recompense
-            if profondeur_courante % 2 == 0:
+                        alpha = recompense   #alpha au mieux croit à chaque boucle, sinon reste constant
+            if profondeur_courante % 2 == 0:  #on fait pareil en minimisant la récompense quand c'est au tour de l'utilisateur)
                 recompense_retenue, coup_retenu = np.inf, None
                 for piece, pos_finale in self.coups_possibles(J):
                     nouvelle_config = self.resultat_coup(piece, pos_finale)
@@ -493,27 +518,35 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):
                     if recompense_retenue > recompense:
                         recompense_retenue = recompense
                         coup_retenu = coup
-                        if recompense_retenue <= alpha:
-                            break
+                        if recompense_retenue <= alpha: #ici on veut que le minimum des recompenses retenues n'aille pas en deçà de alpha
+                            break          #donc si pour le coup considéré on a recompense_retenue <= alpha, alors on s'arrête là, sans regarder les autres coups (travail inutile)
                     if recompense < beta:
-                        beta = recompense
+                        beta = recompense  #beta au mieux reste constant à chaque boucle, sinon décroît
             return coup_retenu, recompense_retenue
 
 
 
 
     def echec(self,J):
-        return Roi(J.couleur).est_menacee(self.board)
+        return Roi(J.couleur).est_menacee(self.board)   #le roi est en échec s'il est directement menacé
 
 if __name__ == "__main__":
     import sys
     app = QtWidgets.QApplication(sys.argv)
-    Jeu_d_echecs = QtWidgets.QMainWindow()
     ui = Ui_Jeu_d_echecs()
+    Jeu=ChessGame()
+    Jeu.show()
     ui.setupUi(Jeu_d_echecs)
     Jeu_d_echecs.show()
     sys.exit(app.exec_())
-    Jeu=ChessGame()
+
+
+if __name__ == "__main__":
+    app = QtWidgets.QApplication([])  # Initialise l'application Qt
+    game = ChessGame()                # Instancie ton jeu
+    game.show()                      # Affiche la fenêtre
+    game.start_game(ia_player='n')   # Lance la partie (IA = noirs)
+    app.exec_()                      # Boucle principale de Qt
 
 
 print("C'est parti pour une partie d'échec!!\n")

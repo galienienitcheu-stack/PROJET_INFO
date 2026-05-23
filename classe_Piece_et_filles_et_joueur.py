@@ -1,5 +1,7 @@
 ## IMPORTATIONS                                                         ################################################
 from abc import ABC, abstractmethod
+from typing import Any
+
 import numpy as np
 from chess import *
 
@@ -9,7 +11,7 @@ dico={"a":1,"b":2,"c":3,"d":4,"e":5,"f":6,"g":7,"h":8}
 
 #Classe Joueur                                                          ################################################
 class Joueur(object):
-    def __init__(self,couleur:str):
+    def __init__(self, couleur: str) -> None:
         """
         Créé un joueur.
 
@@ -28,11 +30,15 @@ class Joueur(object):
             return Joueur('b')
         return Joueur('n')
 
-    def pieces_vivantes(self, E):
+    def pieces_vivantes(self, E: list[list[Piece]]) -> list[Piece]:
+        """
+
+        :type E: object
+        """
         L=[]
-        pieces_Echiquier=[piece for sousliste in E for piece in sousliste]
-        for piece in pieces_Echiquier:
-            if piece.couleur==self.couleur:
+        sousliste: list[Piece]
+        for piece in [piece for sousliste in E for piece in sousliste]:
+            if piece!= None and piece.couleur==self.couleur:
                 L.append(piece)
         return L
 
@@ -80,25 +86,22 @@ class Piece(metaclass=ABCMeta):
 
 
 
-
-
-
 # Classe Tour
 class Tour(Piece):
     def __repr__(self):
-        return "T"+self.couleur
+        return "♖" if self.couleur=='b' else "♜"
     def cases_accesibles(self, E):
         L=[]
         i,j=self.position(E)
         for k in range(-7,8):
             try:
-                L.append((i+k,j))
-                a=E[i + k][j]
+                if E[i+k][j]==None or E[i+k][j].couleur!=self.couleur:
+                    L.append((i+k,j))
             except IndexError:
                 pass
             try:
-                L.append((i,j+k))
-                a=E[i][j + k]
+                if E[i][j+k]==None or E[i][j+k].couleur!=self.couleur:
+                    L.append((i,j+k))
             except IndexError:
                 pass
         return L
@@ -106,7 +109,8 @@ class Tour(Piece):
 #CLASSE CAVALIER                                                                    ####################################
 class Cavalier(Piece):
     def __repr__(self):
-        return "C"+self.couleur
+        return "♘" if self.couleur=='b' else "♞"
+
 
     def cases_accesibles(self, E):
         L=[]
@@ -114,7 +118,7 @@ class Cavalier(Piece):
         aux=[(i-2,j-1),(i-2,j+1),(i-1,j-2),(i-1,j+2),(i+1,j-2),(i+1,j+2),(i+2,j-1),(i+2,j+1)]
         for k,l in aux:
             try:
-                if E[k][l]==None:
+                if E[k][l]==None or E[k][l].couleur!=self.couleur:
                     L.append((k,l))
             except IndexError:
                 pass
@@ -122,17 +126,19 @@ class Cavalier(Piece):
 #CLASSE FOU                                                                        #####################################
 class Fou(Piece):
     def __repr__(self):
-        return "F"+self.couleur
+        return "♗" if self.couleur=='b' else "♝"
     def cases_accesibles(self,E):
         L=[]
         i,j=self.position(E)
         for k in range(-7,8):
             try:
-                L.append((i+k,j+k))
+                if E[i+k][j+k]==None or E[i+k][j+k].couleur!=self.couleur:
+                    L.append((i+k,j+k))
             except IndexError:
                 pass
             try:
-                L.append((i-k,j+k))
+                if E[i-k][j+k]==None or E[i-k][j+k].couleur!=self.couleur:
+                    L.append((i-k,j+k))
             except IndexError:
                 pass
         return L
@@ -140,29 +146,29 @@ class Fou(Piece):
 #CLASSE DAME                                                                       #####################################
 class Dame(Piece):
     def __repr__(self):
-        return "D"+self.couleur
+        return  "♕" if self.couleur=='b' else "♛"
 
     def cases_accesibles(self,E):
         L=[]
         i,j=self.position(E)
         for k in range(-7,8):
             try:
-                if E[i+k][j+k]==None:
+                if E[i+k][j+k]==None or E[i+k][j+k].couleur!=self.couleur:
                     L.append((i+k,j+k))
             except IndexError:
                 pass
             try:
-                if E[i-k][j+k]==None:
+                if E[i-k][j+k]==None or E[i-k][j+k].couleur!=self.couleur:
                     L.append((i-k,j+k))
             except IndexError:
                 pass
             try:
-                if E[i+k][j]==None:
+                if E[i+k][j]==None or E[i+k][j].couleur!=self.couleur:
                     L.append((i+k,j))
             except IndexError:
                 pass
             try:
-                if E[i][j+k]==None:
+                if E[i][j+k]==None or E[i][j+k].couleur!=self.couleur:
                     L.append((i,j+k))
             except IndexError:
                 pass
@@ -172,13 +178,14 @@ class Dame(Piece):
 #CLASSE ROI                                                                        #####################################
 class Roi(Piece):
     def __repr__(self):
-        return "R"+self.couleur
+        return "♔" if self.couleur=='b' else "♚"
 
     def est_menacee(self,E):
+        k,l= self.position
         for i in range(8):
             for j in range(8):
                 if not E[i][j].couleur==self.couleur:
-                    if self.position(E) in E[i][j].cases_accessibles(E):
+                    if self.position in E[i][j].cases_accessibles(E):
                         return True
         return False
     def cases_accesibles(self, E):
@@ -188,10 +195,7 @@ class Roi(Piece):
         for k,l in aux:
             try:
                 if E[k][l]==None or E[k][l].couleur!=self.couleur:
-                    self.position=k,l
-                    if est_menacee(self,E)==False:
                         L.append((k,l))
-                    self.position=ki,j
             except IndexError:
                 pass
         return L
@@ -202,7 +206,7 @@ class Roi(Piece):
 #CLASSE PION                                                                       #####################################
 class Pion(Piece):
     def __repr__(self):
-        return "P",self.couleur
+        return "♙" if self.couleur=='b' else "♟"
 
     def cases_accessibles(self, E):
         L=[]
@@ -211,12 +215,12 @@ class Pion(Piece):
             aux=[(i-1,j),(i-1,j-1),(i-1,j+1)]
             for k,l in aux:
                 try:
-                    if E[i-1][j]==None or E[i-1][j].couleur!=self.couleur:
-                        L = [(i - 1, j)]
+                    if E[k][l]==None or E[k][l].couleur!=self.couleur:
+                        L = [(k, l)]
                 except IndexError:
                     pass
 
-            if self.position(E)[1]==self.position(E)[1]: ### A revoir, deplacement de deux cases si le pion est sur sa colonne initiale
+            if self.position(E)[1]==positions_initiales[self][1]: ### A revoir, deplacement de deux cases si le pion est sur sa colonne initiale
                 try:
                     if E[i-2][j]==None or E[i-2][j].couleur!=self.couleur:
                         L.append((i-2,j))
