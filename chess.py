@@ -12,7 +12,7 @@ from typing import Any
 from PyQt5 import QtCore, QtGui, QtWidgets
 from functools import partial
 from classe_Piece_et_filles_et_joueur import *
-from classe_Piece_et_filles_et_joueur import Joueur
+from Pièces import *
 
 
 # Interface de jeu
@@ -114,24 +114,6 @@ class Ui_Jeu_d_echecs(object):
         self.theme.setText(_translate("Jeu_d_echecs", "Thème Clair"))
         self.Png.setText(_translate("Jeu_d_echecs", "PNG de la partie"))
 
-
-def liste_pieces(couleur):
-    c=couleur
-    return [Tour(c),Cavalier(c),Fou(c),Dame(c),Roi(c),Fou(c),Cavalier(c),Tour(c)]
-
-[T1n,C1n,F1n,Dn,Rn,F2n,C2n,T2n]=liste_pieces('n')
-Pieces_noires=[T1n,C1n,F1n,Dn,Rn,F2n,C2n,T2n]
-[T1b, C1b, F1b, Db, Rb, F2b, C2b, T2b]=liste_pieces('b')
-Pieces_blanches=[T1b,C1b,F1b,Db,Rb,F2b,C2b,T2b]
-[P1b,P2b,P3b,P4b,P5b,P6b,P7b,P8b]=[Pion('b') for _ in range(8)]
-Pions_blancs=[P1b,P2b,P3b,P4b,P5b,P6b,P7b,P8b]
-[P1n,P2n,P3n,P4n,P5n,P6n,P7n,P8n]=[Pion('n') for _ in range(8)]
-Pions_noirs=[P1n,P2n,P3n,P4n,P5n,P6n,P7n,P8n]
-
-
-
-
-
 # Implémentation d'une partie de jeu
 
 class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe créée hérite de deux classes mères
@@ -144,8 +126,7 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe 
         self.current_player = Joueur('b')
         self.setup_board()
         self.move_history = []
-        self.current_player.pieces_vivantes(self.board)=Pieces_blanches+Pions_blancs
-        self.current_player.adv().pieces_vivantes(self.board)=Pieces_noires+Pions_noirs
+
 
 
 
@@ -533,25 +514,14 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe 
 if __name__ == "__main__":
     import sys
     app = QtWidgets.QApplication(sys.argv)
-    ui = Ui_Jeu_d_echecs()
-    Jeu=ChessGame()
-    Jeu.show()
-    ui.setupUi(Jeu_d_echecs)
-    Jeu_d_echecs.show()
-    sys.exit(app.exec_())
+    jeu = ChessGame()  # Instancie ChessGame (qui hérite de Ui_Jeu_d_echecs)
+    jeu.show()        # Affiche la fenêtre
+    jeu.start_game()  # Lance la partie
+    sys.exit(app.exec_())  # Boucle principale de Qt
 
 
-if __name__ == "__main__":
-    app = QtWidgets.QApplication([])  # Initialise l'application Qt
-    game = ChessGame()                # Instancie ton jeu
-    game.show()                      # Affiche la fenêtre
-    game.start_game(ia_player='n')   # Lance la partie (IA = noirs)
-    app.exec_()                      # Boucle principale de Qt
-
-
-print("C'est parti pour une partie d'échec!!\n")
-ia=Joueur('n')
-Jeu.start_game(ia)
+g
+Jeu.start_game()
 
 # boucle=True
 # c='b'

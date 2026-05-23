@@ -4,10 +4,10 @@ from typing import Any
 
 import numpy as np
 from chess import *
+from Pièces import *
 
 
-# dictionnaire de correspondance entre les lignes sur l'échiquier et les lignes dans le tableau numpy modélisant l'échiquier
-dico={"a":1,"b":2,"c":3,"d":4,"e":5,"f":6,"g":7,"h":8}
+
 
 #Classe Joueur                                                          ################################################
 class Joueur(object):
