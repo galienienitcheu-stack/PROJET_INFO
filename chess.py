@@ -13,7 +13,15 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from functools import partial
 from classe_Piece_et_filles_et_joueur import *
 from Pièces import *
-
+from PyQt5.QtWidgets import QMessageBox
+from PyQt5.QtCore import QTimer
+from PyQt5.QtWidgets import QDialog, QVBoxLayout, QPushButton, QLabel
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QPixmap, QPainter, QBrush, QColor
+from PyQt5.QtEffects import QGraphicsBlurEffect
+from PyQt5.QtWidgets import QMessageBox
+import sqlite3
+from datetime import datetime
 
 # Interface de jeu
 class Ui_Jeu_d_echecs(object):
@@ -121,14 +129,40 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe 
     def __init__(self):
         super().__init__()
         self.setupUi(self)
+
+        # Floute l'interface du jeu en arrière-plan (optionnel)
+        self.blur_effect = QGraphicsBlurEffect()
+        self.setGraphicsEffect(self.blur_effect)
+
+        # Affiche la fenêtre de bienvenue
+        self.welcome_dialog = WelcomeDialog(self)
+        self.welcome_dialog.exec_()  # Affiche la fenêtre modale
+
+        # Retire le flou une fois la partie lancée
+        self.setGraphicsEffect(None)
+
         self.selected_piece = None
         self.board = []   #représente l'échiquier et contient toutes les pièces vivantes
         self.current_player = Joueur('b')
         self.setup_board()
         self.move_history = []
+        self.show_start_message()  # Message au démarrage
 
+        # Initialise la base de données
+        self.conn = sqlite3.connect('echecs_games.db')
+        self.cursor = self.conn.cursor()
+        self.cursor.execute('''CREATE TABLE IF NOT EXISTS parties(id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, result TEXT, winner TEXT, moves TEXT )''')
+        self.conn.commit()
 
+    def show_start_message(self):
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Début de partie")
+        msg.setText("C'est parti !")
+        msg.setStandardButtons(QMessageBox.NoButton)  # Pas de bouton
+        msg.show()
 
+        # Ferme la boîte après 2 secondes
+        QTimer.singleShot(2000, msg.close)
 
     def setup_board(self):
         # Position initiale des pièces dans le board
@@ -162,8 +196,6 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe 
                 button.setStyleSheet("font-size: 24px;")
                 button.clicked.connect(partial(self.on_case_clicked, row, col)) #cliquer sur ce bouton appelle la méthode on_case_clicked
 
-
-
     def is_piece_from_current_player(self, piece: Piece) :
         # Vérifie si la pièce appartient au joueur actuel
         return self.current_player.couleur==piece.couleur
@@ -195,11 +227,8 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe 
         if match_nul(self.current_player):
             print("Il y a pat, MATCH  NUL")
         if self.echec_et_mat(self.current_player):
-            c=self.current_player.adv().couleur
-            print("Echec et mat! Fin de la partie. Victoire pour le joueur:", c)
-
-
-
+            winner = "Blancs" if self.current_player == 'n' else "Noirs"
+            self.show_end_game_dialog("Échec et mat", winner)
 
     def reset_highlight(self):
         # Réinitialise la couleur de toutes les cases
@@ -255,7 +284,11 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe 
 
         move_notation=self.notation_move(piece, to_row, to_col,aux)  #on recupère la notation du coup
 
-        add_move_to_history(self, move_notation) #et on l'entre dans l'historique des coups
+
+        internal_notation = f"{chr(97 + from_row)}{8-from_col}-{move_notation}"
+
+        self.move_history.append(internal_notation)  # ajouter le mouvement à l'historique des coups (avec la notation interne)
+        self.listWidget.addItem(move_notation)  # mettre à jour l'interface
 
 
         # Change de joueur
@@ -272,6 +305,22 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe 
 
         if self.current_player==ia:   #si c'est au tour de l'ia
             self.start_game()         #on rappelle la fonction start_game
+
+    def undo_last_move(self):
+        if len(self.move_history) >= 1:
+            last_move = self.move_history.pop()  # Ex: "e2-e4"
+            start_pos, notation_move = last_move.split('-')  # Sépare en "e2" et "e4"
+
+            # Convertis start_pos et notation_move en coordonnées (ex: "e2" → (4, 1))
+            start_col, start_row = ord(start_pos[0]) - ord('a'), int(start_pos[1]) - 1
+            end_col, end_row = ord(notation_move[0]) - ord('a'), int(notation_move[1]) - 1
+
+            # Annule le coup sur l'échiquier
+            self.board[end_row][end_col] = None
+            self.board[start_row][start_col] = self.piece_at(start_col, start_row)  # À adapter
+
+            # Met à jour l'UI
+            self.update_board_ui()
 
     def notation_move(self,piece, to_row, to_col,aux):
         nota=['','','']            #représente les différents symboles à ajouter en cas de prise, fin d'une partie, promotion,...
@@ -296,12 +345,11 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe 
         if type(piece) != Pion:
             return f'{nota[0]}{piece}{nota[1]}{chr(97 + row)}{8 - col}{nota[2]}'   #notation pour les pions
         else:
-            return f'{nota[0]}{nota[1]}{chr(97 + row)}{8 - col}{nota[2]}'          #motation pour les autres pièces
+            return f'{nota[0]}{nota[1]}{chr(97 + row)}{8 - col}{nota[2]}'          #notation pour les autres pièces
 
     def add_move_to_history(self, move_notation):
         """Ajoute un coup à l'historique et au QListWidget."""
-        self.move_history.append(move_notation)    #ajouter le mouvement à l'historique des coups
-        self.listWidget.addItem(move_notation)     #mettre à jour l'interface
+
 
     def petit_roque(self,J):
         pass
@@ -320,7 +368,6 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe 
             L=Pieces_blanches
         return not self.echec(J) and all([piece.cases_accesibles(self.board) == [] for piece in J.pieces_vivantes(self.board)])
 
-
     def ia_move(self):
         if alpha_beta(self.board,J,profondeur_courante,profondeur_max,heuristique,alpha=-np.inf,beta=np.inf)[1]!=-np.inf:
             coup=alpha_beta(self.board,J,profondeur_courante,profondeur_max,heuristique,alpha=-np.inf,beta=np.inf)[0]
@@ -331,8 +378,6 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe 
                 self.move_piece(from_row,from_col,to_row,to_col)
         else:
             print("Abandon de l'IA. Victoire de l'utilisateur")
-
-
 
 
     profondeur_max = 5
@@ -455,7 +500,6 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe 
         E[k][l] = None
         return E                   #retourne le résultat du coup
 
-
     def alpha_beta(self, J, profondeur_courante=1, alpha=-np.inf, beta=np.inf):
         """
         Implémentation de l'algorithme Alpha-Bêta pour les échecs.
@@ -505,11 +549,77 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe 
                         beta = recompense  #beta au mieux reste constant à chaque boucle, sinon décroît
             return coup_retenu, recompense_retenue
 
-
-
-
     def echec(self,J):
         return Roi(J.couleur).est_menacee(self.board)   #le roi est en échec s'il est directement menacé
+
+    def show_end_game_dialog(self, result, winner):
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Fin de partie")
+        msg.setText(f"{result}\nGagnant : {winner}")
+        msg.setStandardButtons(QMessageBox.Ok)
+        msg.exec_()
+
+        # Sauvegarde dans la base de données
+        moves_str = ", ".join(self.move_history)  # Convertit la liste en chaîne
+        self.cursor.execute('''INSERT INTO parties (date, result, winner, moves) VALUES (?, ?, ?, ?) ''', (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), result, winner, moves_str))
+        self.conn.commit()
+
+        # Ajoute le bouton "Nouvelle partie"
+        new_game_button = msg.addButton("Nouvelle partie", QMessageBox.ActionRole)
+        msg.addButton(QMessageBox.Ok)  # Bouton "OK" classique
+
+        msg.exec_()  # Affiche la boîte de dialogue
+
+        # Si l'utilisateur clique sur "Nouvelle partie"
+        if msg.clickedButton() == new_game_button:
+            self.reset_game()  # Méthode pour réinitialiser le jeu
+
+    def on_abandon_clicked(self):
+        winner = "Noirs" if self.current_player == 'b' else "Blancs"
+        self.show_end_game_dialog("Abandon", winner)
+
+    def closeEvent(self, event):
+        self.conn.close()
+        event.accept()
+
+    def reset_game(self):
+        # Réinitialise l'échiquier
+        self.board = []
+        self.setup_board()  # Reconfigure l'échiquier
+
+        # Réinitialise les autres attributs
+        self.move_history = []
+        self.current_player = 'b'
+        self.selected_piece = None
+
+        # Affiche le message de bienvenue (optionnel)
+        self.show_start_message()
+
+class WelcomeDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Bienvenue")
+        self.setModal(True)  # Bloque l'interaction avec la fenêtre principale
+        self.setWindowFlags(Qt.FramelessWindowHint)  # Supprime la barre de titre
+
+        # Layout principal
+        layout = QVBoxLayout(self)
+
+        # Message de bienvenue
+        label = QLabel("Bienvenue dans le jeu d'échecs !")
+        label.setAlignment(Qt.AlignCenter)
+        label.setStyleSheet("font-size: 20px; font-weight: bold;")
+        layout.addWidget(label)
+
+        # Bouton "Commencer une partie"
+        self.start_button = QPushButton("Commencer une partie")
+        self.start_button.setStyleSheet("font-size: 16px; padding: 10px;")
+        self.start_button.clicked.connect(self.accept)  # Ferme la fenêtre et lance le jeu
+        layout.addWidget(self.start_button)
+
+        # Style du fond (optionnel : semi-transparent)
+        self.setStyleSheet("background-color: rgba(255, 255, 255, 200); border-radius: 10px;")
+        self.setFixedSize(300, 150)
 
 if __name__ == "__main__":
     import sys
@@ -520,22 +630,9 @@ if __name__ == "__main__":
     sys.exit(app.exec_())  # Boucle principale de Qt
 
 
-g
-Jeu.start_game()
 
-# boucle=True
-# c='b'
-# while boucle:
-#     try:
-#         c= input("Choisis ta couleur. 'n' pour noir et 'b' pour blanc:  ")
-#         if c not in ["n", "b"]:
-#             raise ValueError("Erreur")
-#     except ValueError:
-#         print("Saisir une entrée correcte")
-#         boucle = True
-#     else:
-#         boucle = False
-# J=Joueur(c)
-# ia=J.adv()
+
+
+
 
 
