@@ -5,7 +5,8 @@ from typing import Any
 import numpy as np
 from chess import *
 from Pièces import *
-
+# --- VARIABLES GLOBALES POUR LES REGLES SPECIALES ---
+dernier_coup = None       # ((i_depart, j_depart), (i_arrivee, j_arrivee), piece)
 
 
 
@@ -59,6 +60,7 @@ class Piece(metaclass=ABCMeta):
             niveau de santé maximal de l'animal. Vaut 20 par défaut.
         """
         self.couleur=couleur
+        self.a_bouge = False
 
     def position(self, E):
         """
@@ -77,8 +79,51 @@ class Piece(metaclass=ABCMeta):
                 if E[i][j]==self:
                     return i,j
         return None
+        
+    def notifier_deplacement(self):
+    """Marque une pièce comme ayant déjà bougé (utile pour le roque)."""
+        self.a_bouge = True
+    
+    def roi_en_echec(E, couleur):
+        # trouve le roi
+        for i in range(8):
+            for j in range(8):
+                p = E[i][j]
+                if isinstance(p, Roi) and p.couleur == couleur:
+                    roi = p
+                    break
+        rpos = roi.position(E)
+
+    # regarde si une pièce adverse attaque le roi
+        for i in range(8):
+            for j in range(8):
+                p = E[i][j]
+                if p is not None and p.couleur != couleur:
+                    if rpos in p.cases_accesibles(E):
+                        return True
+    return False
+
+
+    def simuler_coup(E, i1, j1, i2, j2):
+        # copie légère du plateau
+        E2 = [ligne[:] for ligne in E]
+        piece = E2[i1][j1]
+        E2[i1][j1] = None
+        E2[i2][j2] = piece
+        return E2
+    def filtrer_clouage(self, E, coups):
+        i0, j0 = self.position(E)
+        valides = []
+
+        for i1, j1 in coups:
+            if 0 <= i1 < 8 and 0 <= j1 < 8:
+                E2 = simuler_coup(E, i0, j0, i1, j1)
+            if not roi_en_echec(E2, self.couleur):
+                valides.append((i1, j1))
+        return valides
+    
     @abstractmethod
-    def cases_accesibles(self, E):
+    def cases_accessibles(self, E):
         pass
 
 
@@ -90,7 +135,7 @@ class Piece(metaclass=ABCMeta):
 class Tour(Piece):
     def __repr__(self):
         return "♖" if self.couleur=='b' else "♜"
-    def cases_accesibles(self, E):
+    def cases_accessibles(self, E):
         L=[]
         i,j=self.position(E)
         for k in range(-7,8):
@@ -104,7 +149,7 @@ class Tour(Piece):
                     L.append((i,j+k))
             except IndexError:
                 pass
-        return L
+       return self.filtrer_clouage(E, L)
 
 #CLASSE CAVALIER                                                                    ####################################
 class Cavalier(Piece):
@@ -112,7 +157,7 @@ class Cavalier(Piece):
         return "♘" if self.couleur=='b' else "♞"
 
 
-    def cases_accesibles(self, E):
+    def cases_accessibles(self, E):
         L=[]
         i,j=self.position(E)
         aux=[(i-2,j-1),(i-2,j+1),(i-1,j-2),(i-1,j+2),(i+1,j-2),(i+1,j+2),(i+2,j-1),(i+2,j+1)]
@@ -122,12 +167,12 @@ class Cavalier(Piece):
                     L.append((k,l))
             except IndexError:
                 pass
-        return L
+        return self.filtrer_clouage(E, L)
 #CLASSE FOU                                                                        #####################################
 class Fou(Piece):
     def __repr__(self):
         return "♗" if self.couleur=='b' else "♝"
-    def cases_accesibles(self,E):
+    def cases_accessibles(self,E):
         L=[]
         i,j=self.position(E)
         for k in range(-7,8):
@@ -141,14 +186,14 @@ class Fou(Piece):
                     L.append((i-k,j+k))
             except IndexError:
                 pass
-        return L
+        return self.filtrer_clouage(E, L)
 
 #CLASSE DAME                                                                       #####################################
 class Dame(Piece):
     def __repr__(self):
         return  "♕" if self.couleur=='b' else "♛"
 
-    def cases_accesibles(self,E):
+    def cases_accessibles(self,E):
         L=[]
         i,j=self.position(E)
         for k in range(-7,8):
@@ -172,7 +217,7 @@ class Dame(Piece):
                     L.append((i,j+k))
             except IndexError:
                 pass
-        return L
+        return self.filtrer_clouage(E, L)
 
 
 #CLASSE ROI                                                                        #####################################
@@ -185,20 +230,20 @@ class Roi(Piece):
         for i in range(8):
             for j in range(8):
                 if not E[i][j].couleur==self.couleur:
-                    if self.position in E[i][j].cases_accessibles(E):
+                    if self.position(E) in E[i][j].cases_accessibles(E):
                         return True
         return False
-    def cases_accesibles(self, E):
+    def cases_accessibles(self, E):
         L=[]
         i,j=self.position(E)
         aux=[(i+1,j),(i-1,j),(i+1,j+1),(i,j+1),(i,j-1),(i-1,j-1),(i+1,j-1),(i-1,j+1)]
         for k,l in aux:
             try:
-                if E[k][l]==None or E[k][l].couleur!=self.couleur:
+                if E[k][l] is None or E[k][l].couleur!=self.couleur : 
                         L.append((k,l))
             except IndexError:
                 pass
-        return L
+        return self.filtrer_clouage(E, L)
 
 
 
@@ -216,7 +261,7 @@ class Pion(Piece):
             for k,l in aux:
                 try:
                     if E[k][l]==None or E[k][l].couleur!=self.couleur:
-                        L = [(k, l)]
+                        L.append((k, l))
                 except IndexError:
                     pass
 
@@ -228,7 +273,7 @@ class Pion(Piece):
                     pass
         else:
             aux=[(i+1,j),(i+1,j-1),(i+1,j+1)]
-            for k,l in aux:
+            for i,j in aux:
                 try:
                     if E[i+1][j]==None or E[i+1][j].couleur!=self.couleur:
                         L .append((i+1,j))
