@@ -234,15 +234,46 @@ class Roi(Piece):
                         return True
         return False
     def cases_accessibles(self, E):
-        L=[]
-        i,j=self.position(E)
-        aux=[(i+1,j),(i-1,j),(i+1,j+1),(i,j+1),(i,j-1),(i-1,j-1),(i+1,j-1),(i-1,j+1)]
-        for k,l in aux:
-            try:
-                if E[k][l] is None or E[k][l].couleur!=self.couleur : 
-                        L.append((k,l))
-            except IndexError:
-                pass
+        L = []
+        i, j = self.position(E)
+
+        # ------------------------------
+        #  Déplacements normaux du roi
+        # ------------------------------
+        aux = [
+        (i+1, j),   (i-1, j),
+        (i+1, j+1), (i, j+1),
+        (i, j-1),   (i-1, j-1),
+        (i+1, j-1), (i-1, j+1)
+    ]
+
+        for k, l in aux:
+            # → Correction : vérifier que k et l sont dans l'intervalle [0,7]
+            if 0 <= k < 8 and 0 <= l < 8:
+                if E[k][l] is None or E[k][l].couleur != self.couleur:
+                    L.append((k, l))
+
+        # ---------------------
+        #        ROQUE
+        # ---------------------
+        if not self.a_bouge and not case_est_attaquee(E, i, j, self.couleur):
+
+            # Petit roque (côté roi)
+            tour = E[i][7]
+            if isinstance(tour, Tour) and not tour.a_bouge:
+                if E[i][5] is None and E[i][6] is None:
+                    if (not case_est_attaquee(E, i, 5, self.couleur) and
+                        not case_est_attaquee(E, i, 6, self.couleur)):
+                        L.append((i, 6))  # destination du roi
+
+            # Grand roque (côté dame)
+            tour = E[i][0]
+            if isinstance(tour, Tour) and not tour.a_bouge:
+                if E[i][1] is None and E[i][2] is None and E[i][3] is None:
+                    if (not case_est_attaquee(E, i, 2, self.couleur) and
+                        not case_est_attaquee(E, i, 3, self.couleur)):
+                        L.append((i, 2))  # destination du roi
+
         return self.filtrer_clouage(E, L)
 
 
@@ -252,37 +283,69 @@ class Roi(Piece):
 class Pion(Piece):
     def __repr__(self):
         return "♙" if self.couleur=='b' else "♟"
-
     def cases_accessibles(self, E):
-        L=[]
-        i,j=self.position(E)
-        if self.couleur=='n':
-            aux=[(i-1,j),(i-1,j-1),(i-1,j+1)]
-            for k,l in aux:
-                try:
-                    if E[k][l]==None or E[k][l].couleur!=self.couleur:
-                        L.append((k, l))
-                except IndexError:
-                    pass
+        global dernier_coup
+        L = []
+        i, j = self.position(E)
 
-            if self.position(E)[1]==positions_initiales[self][1]: ### A revoir, deplacement de deux cases si le pion est sur sa colonne initiale
-                try:
-                    if E[i-2][j]==None or E[i-2][j].couleur!=self.couleur:
-                        L.append((i-2,j))
-                except IndexError:
-                    pass
-        else:
-            aux=[(i+1,j),(i+1,j-1),(i+1,j+1)]
-            for i,j in aux:
-                try:
-                    if E[i+1][j]==None or E[i+1][j].couleur!=self.couleur:
-                        L .append((i+1,j))
-                except IndexError:
-                    pass
-            if self.position(E)[1]==self.position(E)[1]: ### A revoir, deplacement de deux cases si le pion est sur sa colonne initiale
-                pass
-        return L
+        direction = 1 if self.couleur == 'b' else -1
+        ligne_promotion = 7 if self.couleur == 'b' else 0
 
+        # -------------------------
+        # 1. Avancée simple
+        # -------------------------
+        if 0 <= i + direction < 8 and E[i + direction][j] is None:
+            L.append((i + direction, j))
+
+        # -------------------------
+        # 2. Avancée double (si n'a jamais bougé)
+        # -------------------------
+        if not self.a_bouge:
+            if E[i + direction][j] is None and E[i + 2*direction][j] is None:
+                L.append((i + 2*direction, j))
+
+        # -------------------------
+        # 3. Captures normales
+        # -------------------------
+        for dj in [-1, 1]:
+            x, y = i + direction, j + dj
+            if 0 <= x < 8 and 0 <= y < 8:
+                if E[x][y] is not None and E[x][y].couleur != self.couleur:
+                    L.append((x, y))
+
+        # -------------------------
+        # 4. PRISE EN PASSANT
+        # -------------------------
+        if dernier_coup:
+            (di, dj), (ai, aj), piece = dernier_coup
+
+            # Le pion adverse doit avoir avancé de deux cases
+            if isinstance(piece, Pion) and abs(ai - di) == 2:
+                # Il doit être sur la même ligne que ce pion
+                if ai == i:
+                    # Et juste à côté
+                    if abs(aj - j) == 1:
+                        # On capture en passant
+                        L.append((i + direction, aj))
+        return self.filtrer_clouage(E, L)
+def case_est_attaquee(E, x, y, couleur_ami):
+    """
+    Retourne True si la case (x, y) est attaquée par un adversaire de couleur ≠ couleur_ami.
+    """
+    for ligne in range(8):
+        for col in range(8):
+            piece = E[ligne][col]
+            if piece is not None and piece.couleur != couleur_ami:
+                # obtenir toutes les cases attaquées par la pièce adverse
+                try:
+                    cases = piece.cases_accessibles(E)
+                except TypeError:
+                    continue
+
+                if (x, y) in cases:
+                    return True
+    return False
+    
 
 
 
