@@ -12,7 +12,6 @@ from typing import Any
 from PyQt5 import QtCore, QtGui, QtWidgets
 from functools import partial
 from classe_Piece_et_filles_et_joueur import *
-from Pièces import *
 from PyQt5.QtWidgets import QMessageBox
 from PyQt5.QtCore import QTimer
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QPushButton, QLabel
@@ -22,6 +21,10 @@ from PyQt5.QtEffects import QGraphicsBlurEffect
 from PyQt5.QtWidgets import QMessageBox
 import sqlite3
 from datetime import datetime
+import copy
+
+from classe_Piece_et_filles_et_joueur import Joueur
+
 
 # Interface de jeu
 class Ui_Jeu_d_echecs(object):
@@ -116,15 +119,21 @@ class Ui_Jeu_d_echecs(object):
     def retranslateUi(self, Jeu_d_echecs):
         _translate = QtCore.QCoreApplication.translate
         Jeu_d_echecs.setWindowTitle(_translate("Jeu_d_echecs", "Jeu d\'échecs"))
-        self.Abandonner.setText(_translate("Jeu_d_echecs", "Abandonner"))
-        self.Rentrer.setText(_translate("Jeu_d_echecs", "Rentrer"))
-        self.Rejouer.setText(_translate("Jeu_d_echecs", "Rejouer"))
-        self.theme.setText(_translate("Jeu_d_echecs", "Thème Clair"))
-        self.Png.setText(_translate("Jeu_d_echecs", "PNG de la partie"))
+        buttons_text = {
+            self.Abandonner: "Abandonner",
+            self.Rentrer: "Rentrer",
+            self.Rejouer: "Rejouer",
+            self.theme: "Thème Clair",
+            self.Png: "PNG de la partie"
+        }
+        for button, text in buttons_text.items():
+            button.setText(_translate("Jeu_d_echecs", text))
 
 # Implémentation d'une partie de jeu
 
 class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe créée hérite de deux classes mères
+
+    current_player: Joueur
 
     def __init__(self):
         super().__init__()
@@ -142,8 +151,11 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe 
         self.setGraphicsEffect(None)
 
         self.selected_piece = None
-        self.board = []   #représente l'échiquier et contient toutes les pièces vivantes
-        self.current_player = Joueur('b')
+        # Initialise un échiquier 8x8 vide
+        self.board = [[None for _ in range(8)] for _ in range(8)]  #représente l'échiquier et contient toutes les pièces vivantes
+        self.joueur_blanc = Joueur('b')
+        self.joueur_noir = Joueur('n')
+        self.current_player = self.joueur_blanc
         self.setup_board()
         self.move_history = []
         self.show_start_message()  # Message au démarrage
@@ -154,6 +166,12 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe 
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS parties(id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, result TEXT, winner TEXT, moves TEXT )''')
         self.conn.commit()
 
+
+        #connexion des boutons
+        self.Abandonner.clicked.connect(self.on_abandon_clicked)
+        self.Rejouer.clicked.connect(self.reset_game)
+        self.Rentrer.clicked.connect(self.undo_last_move)
+
     def show_start_message(self):
         msg = QMessageBox(self)
         msg.setWindowTitle("Début de partie")
@@ -162,326 +180,674 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe 
         msg.show()
 
         # Ferme la boîte après 2 secondes
-        QTimer.singleShot(2000, msg.close)
+        QTimer.singleShot(1500, msg.close)
 
     def setup_board(self):
-        # Position initiale des pièces dans le board
-        for k in range(8):
-            self.board.append([])
 
-        for piece in Ln:
-            self.board[0].append(piece)
-        for piece in Lb:
-            self.board[7].append(piece)
-        for k in range(1,9):
-            self.board[1].append(Pions_noirs[k])
-            self.board[6].append(Pions_blancs[k])
-            self.board[2].append(None)
-            self.board[3].append(None)
-            self.board[4].append(None)
-            self.board[5].append(None)
+        # Place les pièces noires (ligne 0)
+        for col, piece in enumerate(Pieces_noires):
+            self.board[0][col] = piece
 
-            #mise en forme de l'échiquier dans l'interface
-        positions_initiales = {
-            T1n: (0, 0), C1n: (0, 1), F1n: (0, 2), Dn: (0, 3), Rn: (0, 4), F2n: (0, 5), C2n: (0, 6), T2n: (0, 7),
-            P1n: (1, 0), P2n: (1, 1), P3n: (1, 2), P4n: (1, 3), P5n: (1, 4), P6n: (1, 5), P7n: (1, 6), P8n: (1, 7),
-            P1b: (6, 0), P2b: (6, 1), P3b: (6, 2), P4b: (6, 3), P5b: (6, 4), P6b: (6, 5), P7b: (6, 6), P8b: (6, 7),
-            T1b: (7, 0), C1b: (7, 1), F1b: (7, 2), Db: (7, 3), Rb: (7, 4), F2b: (7, 5), C2b: (7, 6), T2b: (7, 7)
-        }
+        # Place les pièces blanches (ligne 7)
+        for col, piece in enumerate(Pieces_blanches):
+            self.board[7][col] = piece
 
-        for piece,(row, col) in positions_initiales.items():
-            button = self.findChild(QtWidgets.QPushButton, f"{chr(97+ row)}{8-col}")
+        # Place les pions noirs (ligne 1)
+        for col, piece in enumerate(Pions_noirs):
+            self.board[1][col] = piece
+
+        # Place les pions blancs (ligne 6)
+        for col, piece in enumerate(Pions_blancs):
+            self.board[6][col] = piece
+
+        # Met à jour l'interface
+        for piece, (row, col) in positions_initiales.items():
+            button_name = f"{chr(97 + col)}{8 - row}"  # Ex: "a8" pour (0,0), "h1" pour (7,7)
+            button = self.findChild(QtWidgets.QPushButton, button_name)
             if button:
-                button.setText(piece)
+                button.setText(str(piece))  # Utilise __repr__ de Piece
                 button.setStyleSheet("font-size: 24px;")
-                button.clicked.connect(partial(self.on_case_clicked, row, col)) #cliquer sur ce bouton appelle la méthode on_case_clicked
+                button.clicked.connect(partial(self.on_case_clicked, row, col))
 
-    def is_piece_from_current_player(self, piece: Piece) :
-        # Vérifie si la pièce appartient au joueur actuel
-        return self.current_player.couleur==piece.couleur
+    self.pieces_prises=[]
+    self.moved_pieces=[]
+    self.pion_avance_de_2_cases = []
 
     def on_case_clicked(self, row, col):
-        if self.selected_piece is None: #Premier clic (sur une case)
-            # Sélectionne la pièce cliquée si la case contient une pièce du joueur actuel
+        if self.selected_piece is None:  # Premier clic
             piece = self.board[row][col]
-            if piece and self.is_piece_from_current_player(piece):
+            if piece and self.current_player.couleur == piece.couleur:
                 self.selected_piece = (row, col)
-                # Mettre en surbrillance la case sélectionnée (optionnel)
-                button = self.findChild(QtWidgets.QPushButton, f"{chr(97 + row)}{8-col}")
-                self.reset_highlight()  # Réinitialise la surbrillance
-                button.setStyleSheet("background-color: yellow; font-size: 24px;")  #mettre en surbrillance la case sélectionnée
-                # for r,c in piece.cases_accessibles(self.board):
-                #     button = self.findChild(QtWidgets.QPushButton, f"{chr(65 + r)}{8-c}")
-                #     button.setStyleSheet("border-color: yellow; font-size: 24px;")
-        else: #deuxième clic (sur une autre case)
-            # Déplace la pièce sélectionnée vers la case cliquée
-            self.move_piece(self.selected_piece[0], self.selected_piece[1], row, col)
+                button = self.findChild(QtWidgets.QPushButton, f"{chr(97 + col)}{8 - row}")
+                self.reset_highlight()
+                button.setStyleSheet("background-color: yellow; font-size: 24px;")
+
+                # Gestion de la prise en passant
+                m, n = None, None
+                if isinstance(piece, Pion) and self.pion_avance_de_2_cases and self.moved_pieces:
+                    i, j = piece.position(self.board)
+                    last_piece = self.moved_pieces[-1]
+                    last_pos = last_piece.position(self.board)
+                    if last_pos == (i, j - 1):  # Pion à gauche
+                        m, n = (i - 1, j - 1) if piece.couleur == 'b' else (i + 1, j - 1)
+                    elif last_pos == (i, j + 1):  # Pion à droite
+                        m, n = (i - 1, j + 1) if piece.couleur == 'b' else (i + 1, j + 1)
+
+                # Liste des cases accessibles (incluant la prise en passant)
+                L = piece.cases_accessibles(self.board)
+                if (m, n) is not None:
+                    L.append((m, n))
+
+                # Surbrillance des cases accessibles
+                for r, c in L:
+                    case_button = self.findChild(QtWidgets.QPushButton, f"{chr(97 + c)}{8 - r}")
+                    if case_button:
+                        case_button.setStyleSheet("border: 2px solid grey; font-size: 24px;")
+            else:
+                self.selected_piece = None
+                self.reset_highlight()
+        else:  # Deuxième clic
+            start_row, start_col = self.selected_piece
+            self.move_piece(start_row, start_col, row, col)
+            self.selected_piece = None
+            self.reset_highlight()
 
     #code du jeu
     def start_game(self):
-        while not self.echec_et_mat(self.current_player) and not match_nul(self.current_player):
-            if self.current_player == ia:  # Tour de l'IA
-                self.ia_move()
-            else:
-                pass    #l'ordinateur attend que l'utilisateur joue
-        if match_nul(self.current_player):
-            print("Il y a pat, MATCH  NUL")
+        # Utilise un QTimer pour éviter de bloquer l'interface
+        self.game_timer = QTimer(self)
+        self.game_timer.timeout.connect(self.check_game_state)
+        self.game_timer.start(100)  # Vérifie toutes les 100 ms
+
+    def check_game_state(self):
         if self.echec_et_mat(self.current_player):
-            winner = "Blancs" if self.current_player == 'n' else "Noirs"
+            self.game_timer.stop()
+            winner = "Blancs" if self.current_player.couleur == 'n' else "Noirs"
             self.show_end_game_dialog("Échec et mat", winner)
+        elif self.match_nul(self.current_player):
+            self.game_timer.stop()
+            self.show_end_game_dialog("Match nul", None)
+        else:
+            if self.current_player == self.joueur_noir:  # Tour de l'IA
+                QTimer.singleShot(500, self.ia_move)
 
     def reset_highlight(self):
         # Réinitialise la couleur de toutes les cases
         for row in range(8):
             for col in range(8):
-                button = self.findChild(QtWidgets.QPushButton, f"{chr(65 + row)}{8-col}")
-                color = "white" if (row + col) % 2 == 0 else "black"
-                button.setStyleSheet(f"background-color: {color}; font-size: 24px;")
+                button = self.findChild(QtWidgets.QPushButton, f"{chr(97 + col)}{8-row}")
+                if button:
+                    color = "white" if (row + col) % 2 == 0 else "black"
+                    button.setStyleSheet(f"background-color: {color}; font-size: 24px;")
 
     def isvalid_move(self, from_row, from_col, to_row, to_col):
-        # Vérifie si le mouvement est valide
-        piece = self.board[from_row][from_col]  #récupère la pièce à la position de départ (s'il en a une)
-        if piece is None:                       #s'il n'y a aucune pièce à cette position on renvoie False
+        piece = self.board[from_row][from_col]
+        if piece is None:
             return False
-        if (to_row,to_col) in piece.cases_accessibles(self.board):  #on regarde si la position finale est accessible par la pièce
-            if not self.echec(self.current_player):      #si le joueur courant n'est pas en echec on retourne True
-                return True
-            else:                                        #sinon on se rassure que ce coup lui permet de sortir de l'échec
-                aux=self.board[to_row][to_col]
-                self.board[to_row][to_col] = piece
-                answer=not(self.echec(self.current_player))
-                self.board[to_row][to_col]=aux
-                return answer
-        return False
+
+        # Gestion de la prise en passant
+        m, n = None, None
+        if isinstance(piece, Pion) and self.pion_avance_de_2_cases and self.moved_pieces:
+            i, j = piece.position(self.board)
+            last_piece = self.moved_pieces[-1]
+            last_pos = last_piece.position(self.board)
+            if last_pos == (i, j - 1):  # Pion à gauche
+                m, n = (i - 1, j - 1) if piece.couleur == 'b' else (i + 1, j - 1)
+            elif last_pos == (i, j + 1):  # Pion à droite
+                m, n = (i - 1, j + 1) if piece.couleur == 'b' else (i + 1, j + 1)
+
+        # Liste des cases accessibles (incluant la prise en passant)
+        L = piece.cases_accessibles(self.board)
+        if (m, n) is not None:
+            L.append((m, n))
+
+        # Vérifie si le mouvement est dans les cases accessibles
+        if (to_row, to_col) not in L:
+            return False
+
+        # Vérifie si le joueur n'est pas en échec après le mouvement
+        aux_to = self.board[to_row][to_col]
+        aux_from = self.board[from_row][from_col]
+        self.board[to_row][to_col] = piece
+        self.board[from_row][from_col] = None
+
+        is_valid = not self.echec(self.current_player)
+
+        # Restaure l'échiquier
+        self.board[from_row][from_col] = aux_from
+        self.board[to_row][to_col] = aux_to
+
+        return is_valid
 
     def move_piece(self, from_row, from_col, to_row, to_col):
-        """
+        if not self.isvalid_move(from_row, from_col, to_row, to_col):
+            return
 
-        :param from_row:
-        :param from_col:
-        :param to_row:
-        :param to_col:
-        :return:
-        """
-        # Vérifie si le mouvement est valide (simplifié)
-        if not self.is_valid_move(from_row, from_col, to_row, to_col): #si le coup (de l'utilisateur forcément car l'ia fait des coups valides) n'est pas valide,
-            return                                                     # on ne fait rien
+        piece = self.board[from_row][from_col]
+        promotion = None
+        prise_en_passant = None
 
-        # Déplace la pièce sur le tableau
-        piece = self.board[from_row][from_col]  #récupère la piece dans le tableau
-        self.board[from_row][from_col] = None   #la position précédente de la pièce n'a plus de pièce
-        aux=self.board[to_row][to_col]          #on récupère la piece qui est dans la position finale (s'il en a une)
+        # Roque
+        if self.petit_roque_possible(self.current_player):
+            R = Rn if self.current_player.couleur == 'n' else Rb
+            i, j = R.position(self.board)
+            if piece == R and (to_row, to_col) == (i, j + 2):
+                self.petit_roque(self.current_player)
+                return
+        if self.grand_roque_possible(self.current_player):
+            R = Rn if self.current_player.couleur == 'n' else Rb
+            i, j = R.position(self.board)
+            if piece == R and (to_row, to_col) == (i, j - 2):
+                self.grand_roque(self.current_player)
+                return
+
+        # Déplacement normal
+        self.board[from_row][from_col] = None
+        self.pieces_prises.append(self.board[to_row][to_col])
         self.board[to_row][to_col] = piece
-        if aux!=None:
-            self.current_player.adv().pieces_vivantes(self.board).remove(aux) #et on l'enlève de la liste des pièces vivantes de l'adversaire
 
-        # Met à jour l'interface (précisément les cases de départ et d'arrivée de la pièce en jeu)
-        from_button = self.findChild(QtWidgets.QPushButton, f"{chr(97 + from_row)}{8-from_col}")
-        to_button = self.findChild(QtWidgets.QPushButton, f"{chr(97 + to_row)}{8-to_col}")
+        # Mise à jour des attributs
+        self.moved_pieces.append(piece)
+        self.pion_avance_de_2cases(piece, from_row, to_row)
+        prise_en_passant = self.prise_en_passant(piece, to_row, to_col)
+        if prise_en_passant:
+            self.pieces_prises[-1] = prise_en_passant
 
-        from_button.setText("")
-        to_button.setText(piece)
+        # Promotion
+        promotion= self.promotion(piece)
+        self.board[to_row][to_col] = promotion[-1]
 
-        move_notation=self.notation_move(piece, to_row, to_col,aux)  #on recupère la notation du coup
+        # Mise à jour de l'UI
+        from_button = self.findChild(QtWidgets.QPushButton, f"{chr(97 + from_col)}{8 - from_row}")
+        to_button = self.findChild(QtWidgets.QPushButton, f"{chr(97 + to_col)}{8 - to_row}")
+        if from_button:
+            from_button.setText("")
+        if to_button:
+            to_button.setText(piece)
 
+        # Notation du coup
+        move_notation = self.notation_move(piece, to_row, to_col, promotion, prise_en_passant)
+        internal_notation = (f"{chr(97 + from_col)}{8 - from_row}-{move_notation}", promotion)
+        self.move_history.append(internal_notation)
+        self.listWidget.addItem(move_notation)
 
-        internal_notation = f"{chr(97 + from_row)}{8-from_col}-{move_notation}"
+        # Changement de joueur
+        self.current_player = self.joueur_noir if self.current_player == self.joueur_blanc else self.joueur_blanc
+        self.selected_piece = None
+        self.reset_highlight()
+        if to_button:
+            to_button.setStyleSheet("background-color: yellow; font-size: 24px;")
 
-        self.move_history.append(internal_notation)  # ajouter le mouvement à l'historique des coups (avec la notation interne)
-        self.listWidget.addItem(move_notation)  # mettre à jour l'interface
+        # Échec
+        if self.echec(self.current_player):
+            R = Rn if self.current_player.couleur == 'n' else Rb
+            row, col = R.position(self.board)
+            button = self.findChild(QtWidgets.QPushButton, f"{chr(97 + col)}{8 - row}")
+            if button:
+                button.setStyleSheet("background-color: red; font-size: 24px;")
 
+        # Tour de l'IA
+        if self.current_player == self.joueur_noir:
+            QTimer.singleShot(500, self.ia_move)                                          #on rappelle la fonction start_game
 
-        # Change de joueur
-        self.current_player = ia if self.current_player == ia.adv() else ia.adv()
+    def petit_roque(self, joueur):
+        """
 
-        self.selected_piece = None #plus aucune pièce n'est sélectionnée
-        self.reset_highlight()  # Réinitialise la surbrillance des cases de l'échiquier
-        to_button.setStyleSheet("background-color: yellow; font-size: 24px;")  #la case d'arrivée est en surbrillance
-        if self.echec(self.current_player):     #si le joueur est en échec
-            row,col=Rn.position(self.board) if self.current_player.couleur=='n' else Rb.position(self.board)
-            button = self.findChild(QtWidgets.QPushButton, f"{chr(97 + row)}{8 - col}")
-            button.setStyleSheet("background-color: red; font-size: 24px;")    #on met en surbrillance la case de son roi
+        :rtype: None
+        """
+        from_row, from_col = (0, 4) if joueur.couleur == 'n' else (7, 4)
+        to_row, to_col = (0, 6) if joueur.couleur == 'n' else (7, 6)
+        from_row_tour, from_col_tour = (0, 7) if joueur.couleur == 'n' else (7, 7)
+        to_row_tour, to_col_tour = (0, 5) if joueur.couleur == 'n' else (7, 5)
 
+        roi = self.board[from_row][from_col]
+        tour = self.board[from_row_tour][from_col_tour]
 
-        if self.current_player==ia:   #si c'est au tour de l'ia
-            self.start_game()         #on rappelle la fonction start_game
+        # Déplace le roi et la tour
+        self.board[from_row][from_col] = None
+        self.board[to_row][to_col] = roi
+        self.board[from_row_tour][from_col_tour] = None
+        self.board[to_row_tour][to_col_tour] = tour
+
+        # Met à jour les attributs
+        self.moved_pieces.extend([roi, tour])
+        self.pion_avance_de_2cases(roi, from_row, to_row)
+        self.pion_avance_de_2cases(tour, from_row_tour, to_row_tour)
+
+        # Notation du coup
+        move_notation = "O-O"
+        internal_notation = (move_notation, 'petit', None)
+        self.move_history.append(internal_notation)
+        self.listWidget.addItem(move_notation)
+
+        # Met à jour l'UI
+        from_button = self.findChild(QtWidgets.QPushButton, f"{chr(97 + from_col)}{8 - from_row}")
+        to_button = self.findChild(QtWidgets.QPushButton, f"{chr(97 + to_col)}{8 - to_row}")
+        from_button_tour = self.findChild(QtWidgets.QPushButton, f"{chr(97 + from_col_tour)}{8 - from_row_tour}")
+        to_button_tour = self.findChild(QtWidgets.QPushButton, f"{chr(97 + to_col_tour)}{8 - to_row_tour}")
+
+        if from_button:
+            from_button.setText("")
+        if to_button:
+            to_button.setText(roi)
+        if from_button_tour:
+            from_button_tour.setText("")
+        if to_button_tour:
+            to_button_tour.setText(tour)
+
+        # Changement de joueur
+        self.current_player = self.joueur_noir if self.current_player == self.joueur_blanc else self.joueur_blanc
+        self.selected_piece = None
+        self.reset_highlight()
+        to_button.setStyleSheet("background-color: yellow; font-size: 24px;")
+
+    def grand_roque(self, joueur):
+        from_row, from_col = (0, 4) if joueur.couleur == 'n' else (7, 4)
+        to_row, to_col = (0, 2) if joueur.couleur == 'n' else (7, 2)
+        from_row_tour, from_col_tour = (0, 0) if joueur.couleur == 'n' else (7, 0)
+        to_row_tour, to_col_tour = (0, 3) if joueur.couleur == 'n' else (7, 3)
+
+        roi = self.board[from_row][from_col]
+        tour = self.board[from_row_tour][from_col_tour]
+
+        # Déplace le roi et la tour
+        self.board[from_row][from_col] = None
+        self.board[to_row][to_col] = roi
+        self.board[from_row_tour][from_col_tour] = None
+        self.board[to_row_tour][to_col_tour] = tour
+
+        # Met à jour les attributs
+        self.moved_pieces.extend([roi, tour])
+        self.pion_avance_de_2cases(roi, from_row, to_row)
+        self.pion_avance_de_2cases(tour, from_row_tour, to_row_tour)
+
+        # Notation du coup
+        move_notation = "O-O-O"
+        internal_notation = (move_notation, 'grand', None)
+        self.move_history.append(internal_notation)
+        self.listWidget.addItem(move_notation)
+
+        # Met à jour l'UI
+        from_button = self.findChild(QtWidgets.QPushButton, f"{chr(97 + from_col)}{8 - from_row}")
+        to_button = self.findChild(QtWidgets.QPushButton, f"{chr(97 + to_col)}{8 - to_row}")
+        from_button_tour = self.findChild(QtWidgets.QPushButton, f"{chr(97 + from_col_tour)}{8 - from_row_tour}")
+        to_button_tour = self.findChild(QtWidgets.QPushButton, f"{chr(97 + to_col_tour)}{8 - to_row_tour}")
+
+        if from_button:
+            from_button.setText("")
+        if to_button:
+            to_button.setText(roi)
+        if from_button_tour:
+            from_button_tour.setText("")
+        if to_button_tour:
+            to_button_tour.setText(tour)
+
+        # Changement de joueur
+        self.current_player = self.joueur_noir if self.current_player == self.joueur_blanc else self.joueur_blanc
+        self.selected_piece = None
+        self.reset_highlight()
+        to_button.setStyleSheet("background-color: yellow; font-size: 24px;")
+
+    def pion_avance_de_2cases(self, piece, from_row, to_row):
+        if isinstance(piece, Pion):
+            m = from_row + 2 if piece.couleur == 'n' else from_row - 2
+            if to_row == m:
+                self.pion_avance_de_2_cases.append(True)
+            else:
+                self.pion_avance_de_2_cases.append(False)
+        self.pion_avance_de_2_cases.append(False)
+
+    def prise_en_passant(self, piece, end_row, end_col):
+        if isinstance(piece, Pion) and len(self.pion_avance_de_2_cases) >= 2 and self.pion_avance_de_2_cases[-2]:
+            last_pion = self.moved_pieces[-2]
+            k, l = last_pion.position(self.board)
+            m, n = (k - 1, l) if piece.couleur == 'b' else (k + 1, l)
+            if piece.position(self.board) == (m, n):
+                self.board[k][l] = None
+                button = self.findChild(QtWidgets.QPushButton, f"{chr(97 + l)}{8 - k}")
+                if button:
+                    button.setText("")
+                return last_pion
+        return None
 
     def undo_last_move(self):
-        if len(self.move_history) >= 1:
-            last_move = self.move_history.pop()  # Ex: "e2-e4"
-            start_pos, notation_move = last_move.split('-')  # Sépare en "e2" et "e4"
+        if not self.move_history:
+            return
 
-            # Convertis start_pos et notation_move en coordonnées (ex: "e2" → (4, 1))
-            start_col, start_row = ord(start_pos[0]) - ord('a'), int(start_pos[1]) - 1
-            end_col, end_row = ord(notation_move[0]) - ord('a'), int(notation_move[1]) - 1
+        last_move, roque, promotion = self.move_history.pop()
+        start_pos, notation_move = last_move.split('-')
 
-            # Annule le coup sur l'échiquier
-            self.board[end_row][end_col] = None
-            self.board[start_row][start_col] = self.piece_at(start_col, start_row)  # À adapter
+        # Convertit les positions
+        start_col, start_row = ord(start_pos[0]) - ord('a'), 8 - int(start_pos[1])
+        end_col, end_row = ord(notation_move[0]) - ord('a'), 8 - int(notation_move[1])
 
-            # Met à jour l'UI
-            self.update_board_ui()
+        # Récupère les pièces
+        piece = self.board[end_row][end_col]
+        caught_piece = self.pieces_prises.pop() if self.pieces_prises else None
 
-    def notation_move(self,piece, to_row, to_col,aux):
-        nota=['','','']            #représente les différents symboles à ajouter en cas de prise, fin d'une partie, promotion,...
-        if self.echec(self.current_player.adv()):
+        # Annule le déplacement
+        self.board[end_row][end_col] = caught_piece
+        self.board[start_row][start_col] = piece
+
+        # Met à jour les listes
+        last_piece = self.moved_pieces.pop() if self.moved_pieces else None
+        last_pion_avance = self.pion_avance_de_2_cases.pop() if self.pion_avance_de_2_cases else None
+
+        # Gestion du roque
+        if roque == 'petit':
+            # Annule le petit roque
+            from_row, from_col = (0, 6) if self.current_player.couleur == 'n' else (7, 6)
+            to_row, to_col = (0, 4) if self.current_player.couleur == 'n' else (7, 4)
+            from_row_tour, from_col_tour = (0, 5) if self.current_player.couleur == 'n' else (7, 5)
+            to_row_tour, to_col_tour = (0, 7) if self.current_player.couleur == 'n' else (7, 7)
+
+            roi = self.board[from_row][from_col]
+            tour = self.board[from_row_tour][from_col_tour]
+
+            self.board[from_row][from_col] = None
+            self.board[to_row][to_col] = roi
+            self.board[from_row_tour][from_col_tour] = None
+            self.board[to_row_tour][to_col_tour] = tour
+
+            # Retire les deux pièces de moved_pieces
+            self.moved_pieces.pop()
+            self.pion_avance_de_2_cases.pop()
+
+        elif roque == 'grand':
+            # Annule le grand roque
+            from_row, from_col = (0, 2) if self.current_player.couleur == 'n' else (7, 2)
+            to_row, to_col = (0, 4) if self.current_player.couleur == 'n' else (7, 4)
+            from_row_tour, from_col_tour = (0, 3) if self.current_player.couleur == 'n' else (7, 3)
+            to_row_tour, to_col_tour = (0, 0) if self.current_player.couleur == 'n' else (7, 0)
+
+            roi = self.board[from_row][from_col]
+            tour = self.board[from_row_tour][from_col_tour]
+
+            self.board[from_row][from_col] = None
+            self.board[to_row][to_col] = roi
+            self.board[from_row_tour][from_col_tour] = None
+            self.board[to_row_tour][to_col_tour] = tour
+
+            # Retire les deux pièces de moved_pieces
+            self.moved_pieces.pop()
+            self.pion_avance_de_2_cases.pop()
+
+        # Gestion de la promotion
+        if promotion:
+            self.board[end_row][end_col] = last_piece  # Remplace la Dame par le Pion
+
+        # Met à jour l'UI
+        from_button = self.findChild(QtWidgets.QPushButton, f"{chr(97 + start_col)}{8 - start_row}")
+        to_button = self.findChild(QtWidgets.QPushButton, f"{chr(97 + end_col)}{8 - end_row}")
+
+        if from_button:
+            from_button.setText(piece)
+        if to_button:
+            to_button.setText(caught_piece if caught_piece is not None else "")
+
+        # Réinitialise la sélection
+        self.selected_piece = None
+        self.reset_highlight()
+
+    def notation_move(self,piece, to_row, to_col,promotion=None,prise_en_passant=None):
+        nota=['','','']            # [préfixe, prise, suffixe]
+        adversaire = self.joueur_noir if self.current_player==self.joueur_blanc else self.joueur_blanc
+        if self.echec(adversaire):
             nota[2]='+'
-        if aux!=None:
+        if self.pieces_prises and self.pieces_prises[-1]:
             nota[1]='x'
-        if self.echec_et_mat(self.current_player.adv()):
+        if self.echec_et_mat(adversaire):
             nota[2]='#'
-        if self.petit_roque(self.current_player):  #petit et grand roque à coder
-            nota[0]='0-0'
-        if self.grand_roque(self.current_player):
-            nota[0]='0-0-0'
-        if type(piece)==Pion :
-            if piece.couleur=='n' and piece.position(self.board)[0]==7:
-                piece=Dn
-                nota[2]='=D'
-            elif piece.couleur=='b' and piece.position(self.board)[0]==0:
-                piece=Db
-
-            #rajouter la promotion
-        if type(piece) != Pion:
-            return f'{nota[0]}{piece}{nota[1]}{chr(97 + row)}{8 - col}{nota[2]}'   #notation pour les pions
+        if promotion:
+            nota[2] = '='+f'{promotion[1]}'
+        if prise_en_passant:
+            nota[1] = 'x e.p.'
+        if not isinstance(piece, Pion):
+            return f'{nota[0]}{piece}{nota[1]}{chr(97 + to_col)}{8 - to_row}{nota[2]}'   #notation pour les pions
         else:
-            return f'{nota[0]}{nota[1]}{chr(97 + row)}{8 - col}{nota[2]}'          #notation pour les autres pièces
+            return f'{nota[0]}{nota[1]}{chr(97 + to_col)}{8 - to_row}{nota[2]}'          #notation pour les autres pièces
 
-    def add_move_to_history(self, move_notation):
-        """Ajoute un coup à l'historique et au QListWidget."""
+    def petit_roque_possible(self, J):
+        # Vérifie que le roi et la tour n'ont pas bougé
+        if J.couleur == 'n':
+            roi = Rn
+            tour = Tn2
+            roi_initial = (0, 4)
+            tour_initial = (0, 7)
+        else:
+            roi = Rb
+            tour = Tb2
+            roi_initial = (7, 4)
+            tour_initial = (7, 7)
 
+        # Vérifie que le roi et la tour sont à leurs positions initiales
+        roi_pos = roi.position(self.board)
+        tour_pos = tour.position(self.board)
+        if roi_pos != roi_initial or tour_pos != tour_initial:
+            return False
 
-    def petit_roque(self,J):
-        pass
-    def grand_roque(self,J):
-        pass
-    def promotion(self,piece):
-        pass
+        # Vérifie que les cases entre le roi et la tour sont vides
+        i, j = roi_pos
+        if self.board[i][j + 1] is not None or self.board[i][j + 2] is not None:
+            return False
+
+        # Vérifie que le roi n'est pas en échec
+        if self.echec(J):
+            return False
+
+        # Simule le roque pour vérifier que le roi ne passe pas par une case en échec
+        # Sauvegarde l'état actuel
+        old_board = [row[:] for row in self.board]
+
+        # Déplace le roi
+        self.board[i][j] = None
+        self.board[i][j + 2] = roi
+
+        # Vérifie que le roi n'est pas en échec après le déplacement
+        if self.echec(J):
+            # Restaure l'état
+            self.board = old_board
+            return False
+
+        # Restaure l'état
+        self.board = old_board
+        return True
+
+    def grand_roque_possible(self, J):
+        # Vérifie que le roi et la tour n'ont pas bougé
+        if J.couleur == 'n':
+            roi = Rn
+            tour = Tn1
+            roi_initial = (0, 4)
+            tour_initial = (0, 0)
+        else:
+            roi = Rb
+            tour = Tb1
+            roi_initial = (7, 4)
+            tour_initial = (7, 0)
+
+        # Vérifie que le roi et la tour sont à leurs positions initiales
+        roi_pos = roi.position(self.board)
+        tour_pos = tour.position(self.board)
+        if roi_pos != roi_initial or tour_pos != tour_initial:
+            return False
+
+        # Vérifie que les cases entre le roi et la tour sont vides
+        i, j = roi_pos
+        if (self.board[i][j - 1] is not None or
+                self.board[i][j - 2] is not None or
+                self.board[i][j - 3] is not None):
+            return False
+
+        # Vérifie que le roi n'est pas en échec
+        if self.echec(J):
+            return False
+
+        # Simule le roque pour vérifier que le roi ne passe pas par une case en échec
+        # Sauvegarde l'état actuel
+        old_board = [row[:] for row in self.board]
+
+        # Déplace le roi
+        self.board[i][j] = None
+        self.board[i][j - 2] = roi
+
+        # Vérifie que le roi n'est pas en échec après le déplacement
+        if self.echec(J):
+            # Restaure l'état
+            self.board = old_board
+            return False
+
+        # Restaure l'état
+        self.board = old_board
+        return True
+
+    def promotion(self, piece):
+        row = piece.position(self.board)[0]
+        if piece.couleur == 'b' and row == 0:
+            # Boîte de dialogue pour choisir la pièce
+            items = ["Dame", "Tour", "Cavalier", "Fou"]
+            item, ok = QInputDialog.getItem(self, "Promotion", "Choisissez une pièce:", items, 0, False)
+            if ok:
+                if item == "Dame":
+                    return True, Dame('b')
+                elif item == "Tour":
+                    return True, Tour('b')
+                elif item == "Cavalier":
+                    return True, Cavalier('b')
+                elif item == "Fou":
+                    return True, Fou('b')
+        elif piece.couleur == 'n' and row == 7:
+            items = ["Dame", "Tour", "Cavalier", "Fou"]
+            item, ok = QInputDialog.getItem(self, "Promotion", "Choisissez une pièce:", items, 0, False)
+            if ok:
+                if item == "Dame":
+                    return True, Dame('n')
+                elif item == "Tour":
+                    return True, Tour('n')
+                elif item == "Cavalier":
+                    return True, Cavalier('n')
+                elif item == "Fou":
+                    return True, Fou('n')
+        return False, piece
 
     def echec_et_mat(self, J):
-        return self.echec(J) and Roi(J.couleur).cases_accesibles(self.board) == []
+        roi = Rn if J.couleur == 'n' else Rb
+        if not self.echec(J):
+            return False  # Pas en échec → pas échec et mat
+        # Vérifie que le roi n'a aucun coup légal
+        return len(roi.cases_accesibles(self.board)) == 0
 
     def match_nul(self,J):
-        if J.couleur=='n':
-            L=Pieces_noires
-        else:
-            L=Pieces_blanches
         return not self.echec(J) and all([piece.cases_accesibles(self.board) == [] for piece in J.pieces_vivantes(self.board)])
 
+    self.profondeur_max = 5
+    self.game_over=False
+
     def ia_move(self):
-        if alpha_beta(self.board,J,profondeur_courante,profondeur_max,heuristique,alpha=-np.inf,beta=np.inf)[1]!=-np.inf:
-            coup=alpha_beta(self.board,J,profondeur_courante,profondeur_max,heuristique,alpha=-np.inf,beta=np.inf)[0]
+        def ia_move(self):
+            if self.game_over:
+                return  # Ne fait rien si la partie est terminée
+            ...
+        try:
+            resultat = alpha_beta(self.board, self.ia, self.profondeur_courante, self.profondeur_max, self.heuristique, alpha=-np.inf, beta=np.inf)
+        except Exception as e:
+            print(f"Erreur dans alpha_beta: {e}")
+            QMessageBox.information(self, "Erreur", "L'IA a rencontré une erreur.")
+            self.game_over = True
+            return
+        if resultat[1]!=-np.inf:
+            coup=resultat[0]
             piece,pos_finale=coup
-            from_row,from_col=piece.position()
+            from_row,from_col=piece.position(self.board)
             to_row,to_col=pos_finale
-            if isvalid_move(self, from_row, from_col, to_row, to_col):
+            if self.isvalid_move(from_row, from_col, to_row, to_col):
                 self.move_piece(from_row,from_col,to_row,to_col)
         else:
-            print("Abandon de l'IA. Victoire de l'utilisateur")
+            QMessageBox.information(self, "Fin de partie", "Abandon de l'IA. Victoire de l'utilisateur!")
+            self.game_over = True  # Désactive les mouvements suivants
 
 
-    profondeur_max = 5
 
 #### logique du jeu de l'IA
     def heuristique(self, J):
         """
-        Renvoie l'heuristique d'une configuration pour un joueur J
-
-        Paramètres
-        ----------
-        E : Echiquier
-            L'échiquier
-        J: Joueur
-            Un joueur.
-
-        Renvoie
-        -------
-        h : int
-            l'heuristique de la configuration E
-            """
+        Renvoie l'heuristique d'une configuration pour un joueur J.
+        Basée sur :
+        - Valeur des pièces (matériel)
+        - Contrôle du centre
+        - Mobilité des pièces
+        - Pénalités pour les pions mal placés
+        """
         h = 0
         c = J.couleur
-        nb_fou = 0
-        E=self.board
-        # déséquilibre du matériel en centipion
-        for liste in E:
-            for piece in liste:
-                if piece != None:
-                    if type(piece) == Pion:
-                        if piece.couleur == c:
-                            h += 100
-                        else:
-                            h -= 100
-                    if type(piece) == Cavalier:
-                        if piece.couleur == c:
-                            h += 300
-                        else:
-                            h -= 300
-                    if type(piece) == Fou:
-                        if piece.couleur == c:
-                            h += 300
-                            nb_fou += 1
-                        else:
-                            h -= 300
-                    if type(piece) == Tour:
-                        if piece.couleur == c:
-                            h += 500
-                        else:
-                            h -= 500
-                    if type(piece) == Dame:
-                        if piece.couleur == c:
-                            h += 900
-                        else:
-                            h -= 900
-                    if type(piece) == Roi:
-                        h += 0
+        E = self.board
 
-                    if piece.couleur == c:
-                        i, j = piece.position(E)
-                        # Bonus pour le nombre de coups légaux
-                        h += len(piece.cases_accessibles(E))
-                        # Contrôle du centre
-                        if (i, j) in [(4, 3), (4, 4), (3, 3), (3, 4)]:
-                            h += 100
-                        # Pions au bord pénalisés
-                        if type(piece) == Pion:
-                            if j in [0, 8]:
-                                h -= 100
-                            # bonus pour les pions connectés ou qui se défendent
-                            for k, l in [(i - 1, j - 1), (i + 1, j + 1), (i, j - 1), (i, j + 1), (i - 1, j + 1),
-                                         (i + 1, j - 1)]:
-                                try:
-                                    if type(E[k][l]) == piece:
-                                        h += 100
-                                except IndexError:
-                                    pass
-                            # malus pour les pions doublés
-                            for k, l in [(i - 1, j), (i + 1, j)]:
-                                try:
-                                    if type(E[k][l]) == piece:
-                                        h -= 100
-                                except IndexError:
-                                    pass
-                            # Bonus pour les pions passés
-                            if (c == 'n' and i == 7 and E[i + 1][j] == None) or (
-                                    c == 'b' and i == 1 and E[i - 1][j] == None):
-                                h += 100
-                        # Malus pour les fous bloqués par les pions de la même couleur
-                        if type(piece) == Fou:
-                            for k, l in [(i - 1, j - 1), (i + 1, j + 1), (i + 1, j - 1), (i - 1, j + 1)]:
-                                try:
-                                    if E[k][l].couleur == c:
-                                        h -= 50
-                                except IndexError:
-                                    pass
-                        # Bonus pour un roi roqué
-                        if type(piece) == Roi:
-                            if (c == 'n' and (i, j) in [(0, 6), (0, 2)]) or (c == 'b' and (i, j) in [(7, 6), (7, 2)]):
-                                h += 100
+        # Valeurs des pièces (en centipions)
+        valeurs = {
+            Pion: 100,
+            Cavalier: 300,
+            Fou: 300,
+            Tour: 500,
+            Dame: 900,
+            Roi: 0  # Le roi n'a pas de valeur matérielle
+        }
 
         # Bonus pour les paires de fous
-        if nb_fou == 2:
+        nb_fou = 0
+
+        for i, row in enumerate(E):
+            for j, piece in enumerate(row):
+                if piece is None:
+                    continue
+
+                # Valeur matérielle
+                valeur = valeurs.get(type(piece), 0)
+                if piece.couleur == c:
+                    h += valeur
+                else:
+                    h -= valeur
+
+                # Bonus pour les pièces du joueur J
+                if piece.couleur == c:
+                    # Bonus pour le contrôle du centre (cases d4, d5, e4, e5)
+                    if (i, j) in [(3, 3), (3, 4), (4, 3), (4, 4)]:
+                        h += 10  # Bonus modéré pour le centre
+
+                    # Bonus pour la mobilité (nombre de coups légaux)
+                    h += len(piece.cases_accessibles(E)) * 10  # 10 centipions par coup légal
+
+                    # Spécifique aux pions
+                    if isinstance(piece, Pion):
+                        # Pénalité pour les pions sur les bords
+                        if j in [0, 7]:
+                            h -= 20
+
+                        # Bonus pour les pions avancés (proches de la promotion)
+                        if c == 'b' and i == 1:  # Pion blanc en 7ème ligne (index 1)
+                            h += 50
+                        elif c == 'n' and i == 6:  # Pion noir en 2ème ligne (index 6)
+                            h += 50
+
+                        # Bonus pour les pions connectés (protégés par un autre pion)
+                        for di, dj in [(-1, -1), (-1, 1)]:
+                            ni, nj = i + di, j + dj
+                            if 0 <= ni < 8 and 0 <= nj < 8:
+                                if isinstance(E[ni][nj], Pion) and E[ni][nj].couleur == c:
+                                    h += 20
+
+                    # Spécifique aux fous
+                    if isinstance(piece, Fou):
+                        nb_fou += 1
+
+                    # Bonus pour le roque (roi en sécurité)
+                    if isinstance(piece, Roi):
+                        if (c == 'n' and (i, j) in [(0, 2), (0, 6)]) or (c == 'b' and (i, j) in [(7, 2), (7, 6)]):
+                            h += 50
+
+        # Bonus pour les paires de fous (contrôle de cases de couleurs opposées)
+        if nb_fou >= 2:
             h += 50
+
         return h
 
     def coups_possibles(self,J):
@@ -490,79 +856,109 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe 
         for piece in J.pieces_vivantes(E):   #pour chaque pièce vivante du joueur J
             for pos in piece.cases_accesibles(E):    #pour chaque position accessible par cette pièce
                 L.append((piece, pos))          #on rajoute le coup (piece,position finale de la pièce)
+        if self.petit_roque_possible(J):
+            roi = Rn if J.couleur == 'n' else Rb
+            L.append((roi, (roi.row, roi.col + 2)))  # Petit roque
+        if self.grand_roque_possible(J):
+            roi = Rn if J.couleur == 'n' else Rb
+            L.append((roi, (roi.row, roi.col - 2)))  # Grand roque
         return L
 
-    def resultat_coup(self, piece, pos_finale):
-        E=self.board   #fait une copie de l'échiquier sur E, dont ne le modifie pas réelement, mais modifie sa copie
+    def resultat_coup(self, piece, pos_finale,roque=None,promotion=None,prise_en_passant=None):
+        E = copy.deepcopy(self.board)  #crée une copie profonde de l'échiquier sur E, dont ne le modifie pas réelement, mais modifie sa copie
         k, l = piece.position(E)   #position actuelle de la pièce
         i, j = pos_finale          #sa position finale
         E[i][j] = piece            #modifie l'échiquier en faisant le coup
         E[k][l] = None
+        # Gestion du roque
+        if roque == 'petit':
+            # Déplace le roi
+            E[i][j] = piece
+            E[k][l] = None
+            # Déplace la tour
+            tour = E[k][l + 3]  # Tour à droite du roi (ex: (0,7) pour les noirs)
+            E[k][l + 1] = tour
+            E[k][l + 3] = None
+        elif roque == 'grand':
+            # Déplace le roi
+            E[i][j] = piece
+            E[k][l] = None
+            # Déplace la tour
+            tour = E[k][l - 4]  # Tour à gauche du roi (ex: (0,0) pour les noirs)
+            E[k][l - 1] = tour
+            E[k][l - 4] = None
+        # Gestion de la prise en passant
+        elif prise_en_passant:
+            # Supprime le pion capturé (à gauche ou à droite)
+            if piece.couleur == 'b':
+                E[i + 1][j] = None  # Pion noir capturé
+            else:
+                E[i - 1][j] = None  # Pion blanc capturé
+        # Gestion de la promotion
+        elif promotion:
+            E[i][j] = promotion  # Remplace le pion par la pièce promue
+        else:
+            # Déplacement normal
+            E[i][j] = piece
+            E[k][l] = None
         return E                   #retourne le résultat du coup
 
-    def alpha_beta(self, J, profondeur_courante=1, alpha=-np.inf, beta=np.inf):
-        """
-        Implémentation de l'algorithme Alpha-Bêta pour les échecs.
-
-        Args:
-            E: État du plateau (configuration actuelle).
-            J: Joueur actuel (ou objet représentant le joueur).
-            profondeur_courante: Profondeur actuelle dans l'arbre.
-            profondeur_max: Profondeur maximale de recherche.
-            heuristique: Fonction d'évaluation (ex: heuristique(E, J) -> float).
-            alpha: Meilleure valeur déjà trouvée pour le joueur maximisant (IA).
-            beta: Meilleure valeur déjà trouvée pour le joueur minimisant (adversaire).
-            est_maximisant: True si c'est le tour de l'IA (maximiser), False sinon (minimiser).
-
-        Returns:
-            tuple: (meilleur_coup, score)
-                - meilleur_coup: Tuple (piece, pos_finale) ou None si profondeur_max atteinte.
-                - score: Score heuristique associé.
-        """
-        E=self.board
+    def alpha_beta(self, J, profondeur_courante=1, alpha=-np.inf, beta=np.inf, board=None, est_maximisant=True):
+        if board is None:
+            board = self.board
         if profondeur_courante >= profondeur_max:
-            return None, self.heuristique(E, J)
-        else:
-            if profondeur_courante % 2 == 1:         #si c'est à J (l'IA) de jouer
-                recompense_retenue, coup_retenu = -np.inf, None
-                for piece, pos_finale in self.coups_possibles(J):   #pour chaque coup possible
-                    nouvelle_config = self.resultat_coup(piece, pos_finale)   #on récupère la configuration après coup
-                    coup, recompense = self.alpha_beta(nouvelle_config, J, profondeur_courante + 1, alpha, beta)  #on appelle récursivement alpha_beta pour obtenir le meilleur coup à effectuer dans la nouvelle configuration et la récompense assosié
-                    if recompense_retenue < recompense:
-                        recompense_retenue = recompense
-                        coup_retenu = coup   #on retient le coup dont la recompense est maximale
-                        if recompense_retenue >= beta:  #le maximum des récompenses retenues pour chaque coup ne doit pas exéceder beta donc
-                            break       #si pour ce coup on a recompense_retenue >= beta, alors on s'arrête là, sans regarder les autres coups (travail inutile)
-                    if recompense > alpha:
-                        alpha = recompense   #alpha au mieux croit à chaque boucle, sinon reste constant
-            if profondeur_courante % 2 == 0:  #on fait pareil en minimisant la récompense quand c'est au tour de l'utilisateur)
-                recompense_retenue, coup_retenu = np.inf, None
-                for piece, pos_finale in self.coups_possibles(J):
-                    nouvelle_config = self.resultat_coup(piece, pos_finale)
-                    coup, recompense = self.alpha_beta(nouvelle_config, J, profondeur_courante + 1, alpha, beta)
-                    if recompense_retenue > recompense:
-                        recompense_retenue = recompense
-                        coup_retenu = coup
-                        if recompense_retenue <= alpha: #ici on veut que le minimum des recompenses retenues n'aille pas en deçà de alpha
-                            break          #donc si pour le coup considéré on a recompense_retenue <= alpha, alors on s'arrête là, sans regarder les autres coups (travail inutile)
-                    if recompense < beta:
-                        beta = recompense  #beta au mieux reste constant à chaque boucle, sinon décroît
+            return None, self.heuristique(board, J)
+
+        if est_maximisant:  # Tour de l'IA (maximiser)
+            recompense_retenue, coup_retenu = -np.inf, None
+            for piece, pos_finale in self.coups_possibles(J, board):
+                nouvelle_config = self.resultat_coup(board, piece, pos_finale)
+                next_J = self.joueur_noir if J == self.joueur_blanc else self.joueur_blanc
+                coup, recompense = self.alpha_beta(next_J, profondeur_courante + 1, alpha, beta, nouvelle_config, False)
+                if recompense > recompense_retenue:
+                    recompense_retenue = recompense
+                    coup_retenu = (piece, pos_finale)
+                if recompense_retenue >= beta:
+                    break
+                if recompense > alpha:
+                    alpha = recompense
+            return coup_retenu, recompense_retenue
+        else:  # Tour de l'adversaire (minimiser)
+            recompense_retenue, coup_retenu = np.inf, None
+            for piece, pos_finale in self.coups_possibles(J, board):
+                nouvelle_config = self.resultat_coup(board, piece, pos_finale)
+                next_J = self.joueur_noir if J == self.joueur_blanc else self.joueur_blanc
+                coup, recompense = self.alpha_beta(next_J, profondeur_courante + 1, alpha, beta, nouvelle_config, True)
+                if recompense < recompense_retenue:
+                    recompense_retenue = recompense
+                    coup_retenu = (piece, pos_finale)
+                if recompense_retenue <= alpha:
+                    break
+                if recompense < beta:
+                    beta = recompense
             return coup_retenu, recompense_retenue
 
     def echec(self,J):
-        return Roi(J.couleur).est_menacee(self.board)   #le roi est en échec s'il est directement menacé
+        R=Rn if J.couleur=='n' else Rb
+        return R.est_menacee(self.board)   #le roi est en échec s'il est directement menacé
 
     def show_end_game_dialog(self, result, winner):
         msg = QMessageBox(self)
         msg.setWindowTitle("Fin de partie")
         msg.setText(f"{result}\nGagnant : {winner}")
         msg.setStandardButtons(QMessageBox.Ok)
-        msg.exec_()
 
         # Sauvegarde dans la base de données
-        moves_str = ", ".join(self.move_history)  # Convertit la liste en chaîne
-        self.cursor.execute('''INSERT INTO parties (date, result, winner, moves) VALUES (?, ?, ?, ?) ''', (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), result, winner, moves_str))
-        self.conn.commit()
+        try:
+            moves_str = ", ".join([move[0] for move in self.move_history])
+            self.cursor.execute('''
+                INSERT INTO parties (date, result, winner, moves)
+                VALUES (?, ?, ?, ?)
+            ''', (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), result, winner, moves_str))
+            self.conn.commit()
+        except Exception as e:
+            print(f"Erreur lors de la sauvegarde de la partie: {e}")
+            QMessageBox.warning(self, "Erreur", "La partie n'a pas pu être sauvegardée.")
 
         # Ajoute le bouton "Nouvelle partie"
         new_game_button = msg.addButton("Nouvelle partie", QMessageBox.ActionRole)
@@ -575,7 +971,7 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe 
             self.reset_game()  # Méthode pour réinitialiser le jeu
 
     def on_abandon_clicked(self):
-        winner = "Noirs" if self.current_player == 'b' else "Blancs"
+        winner = "Noirs" if self.current_player.couleur == 'b' else "Blancs"
         self.show_end_game_dialog("Abandon", winner)
 
     def closeEvent(self, event):
@@ -583,51 +979,87 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe 
         event.accept()
 
     def reset_game(self):
-        # Réinitialise l'échiquier
         self.board = []
-        self.setup_board()  # Reconfigure l'échiquier
-
-        # Réinitialise les autres attributs
+        self.setup_board()
         self.move_history = []
-        self.current_player = 'b'
+        self.pieces_prises = []
+        self.moved_pieces = []
+        self.pion_avance_de_2_cases = []
+        self.current_player = self.joueur_blanc
         self.selected_piece = None
 
-        # Affiche le message de bienvenue (optionnel)
+        # Réinitialise l'UI
+        self.listWidget.clear()  # Efface l'historique des coups
+        self.reset_highlight()  # Réinitialise la surbrillance des cases
+
         self.show_start_message()
+
+
+
 
 class WelcomeDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Bienvenue")
         self.setModal(True)  # Bloque l'interaction avec la fenêtre principale
-        self.setWindowFlags(Qt.FramelessWindowHint)  # Supprime la barre de titre
+        self.setWindowFlags(Qt.Window | Qt.WindowCloseButtonHint)  # Garde la barre de titre
+
+        # Active la transparence si nécessaire
+        self.setAttribute(Qt.WA_TranslucentBackground)
 
         # Layout principal
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)  # Marges internes
 
         # Message de bienvenue
         label = QLabel("Bienvenue dans le jeu d'échecs !")
         label.setAlignment(Qt.AlignCenter)
-        label.setStyleSheet("font-size: 20px; font-weight: bold;")
+        label.setStyleSheet("font-size: 24px; font-weight: bold; color: black;")
         layout.addWidget(label)
 
         # Bouton "Commencer une partie"
         self.start_button = QPushButton("Commencer une partie")
-        self.start_button.setStyleSheet("font-size: 16px; padding: 10px;")
+        self.start_button.setStyleSheet("""
+            font-size: 18px;
+            padding: 12px;
+            background-color: #4CAF50;
+            color: white;
+            border-radius: 5px;
+        """)
         self.start_button.clicked.connect(self.accept)  # Ferme la fenêtre et lance le jeu
         layout.addWidget(self.start_button)
 
-        # Style du fond (optionnel : semi-transparent)
-        self.setStyleSheet("background-color: rgba(255, 255, 255, 200); border-radius: 10px;")
-        self.setFixedSize(300, 150)
+        # Bouton "Fermer" (optionnel)
+        close_button = QPushButton("Fermer")
+        close_button.setStyleSheet("""
+            font-size: 16px;
+            padding: 8px;
+            background-color: #f44336;
+            color: white;
+            border-radius: 5px;
+        """)
+        close_button.clicked.connect(self.reject)  # Ferme la fenêtre sans lancer le jeu
+        layout.addWidget(close_button)
+
+        # Style du fond
+        self.setStyleSheet("""
+            background-color: rgba(255, 255, 255, 230);
+            border-radius: 15px;
+            border: 2px solid black;
+        """)
+
+        # Ajuste la taille en fonction de l'écran
+        screen = QDesktopWidget().screenGeometry()
+        self.setFixedSize(screen.width() // 4, screen.height() // 5)
 
 if __name__ == "__main__":
     import sys
     app = QtWidgets.QApplication(sys.argv)
-    jeu = ChessGame()  # Instancie ChessGame (qui hérite de Ui_Jeu_d_echecs)
-    jeu.show()        # Affiche la fenêtre
-    jeu.start_game()  # Lance la partie
-    sys.exit(app.exec_())  # Boucle principale de Qt
+    jeu = ChessGame()
+    jeu.show()
+    # Lance start_game après que la fenêtre soit affichée
+    QtCore.QTimer.singleShot(100, jeu.start_game)  # Délai de 100 ms
+    sys.exit(app.exec_())
 
 
 
