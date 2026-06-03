@@ -149,11 +149,28 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe 
 
         # Retire le flou une fois la partie lancée
         self.setGraphicsEffect(None)
+         # Choix de la couleur du joueur
+        reponse = QMessageBox.question(
+            self,
+            "Choix de la couleur",
+            "Voulez-vous jouer les Blancs ?\n(Oui = Blancs, Non = Noirs)",
+            QMessageBox.Yes | QMessageBox.No
+        )
+
+        self.joueur_blanc = Joueur('b')
+        self.joueur_noir = Joueur('n')
+
+        if reponse == QMessageBox.Yes:
+            self.joueur_humain = self.joueur_blanc
+            self.ia = self.joueur_noir
+        else:
+            self.joueur_humain = self.joueur_noir
+            self.ia = self.joueur_blanc
+
         self.selected_piece = None
         # Initialise un échiquier 8x8 vide
         self.board = [[None for _ in range(8)] for _ in range(8)]  #représente l'échiquier et contient toutes les pièces vivantes
-        self.joueur_blanc = Joueur('b')
-        self.joueur_noir = Joueur('n')
+        
         self.profondeur_max = 5
         self.game_over = False
         self.current_player = self.joueur_blanc
@@ -176,6 +193,10 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe 
         self.Abandonner.clicked.connect(self.on_abandon_clicked)
         self.Rejouer.clicked.connect(self.reset_game)
         self.Rentrer.clicked.connect(self.undo_last_move)
+        # Si le joueur a choisi les noirs,
+        # l'IA (blanche) joue immédiatement.
+        if self.ia == self.joueur_blanc:
+            QTimer.singleShot(500, self.ia_move)
 
     def show_start_message(self):
         msg = QMessageBox(self)
