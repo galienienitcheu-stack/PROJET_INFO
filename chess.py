@@ -228,8 +228,7 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe 
 
         # Met à jour l'interface
         for piece, (row, col) in positions_initiales.items():
-            button_name = f"{chr(97 + col)}{8 - row}"  # Ex: "a8" pour (0,0), "h1" pour (7,7)
-            button = self.findChild(QtWidgets.QPushButton, button_name)
+            button = self.findChild(QtWidgets.QPushButton, self.nom_case(row,col))
             if button:
                 button.setText(piece)  # Utilise __repr__ de Piece
                 button.setStyleSheet("font-size: 24px;")
@@ -240,7 +239,7 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe 
             piece = self.board[row][col]
             if piece and self.current_player.couleur == piece.couleur:
                 self.selected_piece = (row, col)
-                button = self.findChild(QtWidgets.QPushButton, f"{chr(97 + col)}{8 - row}")
+                button = self.findChild(QtWidgets.QPushButton, self.nom_case(row, col))
                 self.reset_highlight()
                 button.setStyleSheet("background-color: yellow; font-size: 24px;")
 
@@ -262,7 +261,7 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe 
 
                 # Surbrillance des cases accessibles
                 for r, c in L:
-                    case_button = self.findChild(QtWidgets.QPushButton, f"{chr(97 + c)}{8 - r}")
+                    case_button = self.findChild(QtWidgets.QPushButton, self.nom_case(r, c)")
                     if case_button:
                         case_button.setStyleSheet("border: 2px solid grey; font-size: 24px;")
             else:
@@ -280,7 +279,7 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe 
         self.game_timer = QTimer(self)
         self.game_timer.timeout.connect(self.check_game_state)
         self.game_timer.start(100)  # Vérifie toutes les 100 ms
-
+ 
     def check_game_state(self):
         if self.echec_et_mat(self.current_player):
             self.game_timer.stop()
@@ -297,7 +296,7 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe 
         # Réinitialise la couleur de toutes les cases
         for row in range(8):
             for col in range(8):
-                button = self.findChild(QtWidgets.QPushButton, f"{chr(97 + col)}{8-row}")
+                button = self.findChild(QtWidgets.QPushButton, self.nom_case(r, c)")
                 if button:
                     color = "white" if (row + col) % 2 == 0 else "black"
                     button.setStyleSheet(f"background-color: {color}; font-size: 24px;")
@@ -384,8 +383,8 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe 
         self.board[to_row][to_col] = promotion[-1]
 
         # Mise à jour de l'UI
-        from_button = self.findChild(QtWidgets.QPushButton, f"{chr(97 + from_col)}{8 - from_row}")
-        to_button = self.findChild(QtWidgets.QPushButton, f"{chr(97 + to_col)}{8 - to_row}")
+        from_button = self.findChild(QtWidgets.QPushButton, self.nom_case(from_row, from_col))
+        to_button = self.findChild(QtWidgets.QPushButton,self.nom_case(to_row, to_col))
         if from_button:
             from_button.setText("")
         if to_button:
@@ -505,7 +504,7 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe 
             m, n = (k - 1, l) if piece.couleur == 'b' else (k + 1, l)
             if piece.position(self.board) == (m, n):
                 self.board[k][l] = None
-                button = self.findChild(QtWidgets.QPushButton, f"{chr(97 + l)}{8 - k}")
+                button = self.findChild(QtWidgets.QPushButton,  self.nom_case(k, l))
                 if button:
                     button.setText("")
                 return last_pion
@@ -578,8 +577,8 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe 
             self.board[end_row][end_col] = last_piece  # Remplace la Dame par le Pion
 
         # Met à jour l'UI
-        from_button = self.findChild(QtWidgets.QPushButton, f"{chr(97 + start_col)}{8 - start_row}")
-        to_button = self.findChild(QtWidgets.QPushButton, f"{chr(97 + end_col)}{8 - end_row}")
+        from_button = self.findChild(QtWidgets.QPushButton, self.nom_case(start_row, start_col))
+        to_button = self.findChild(QtWidgets.QPushButton, self.nom_case(end_row, end_col))
 
         if from_button:
             from_button.setText(piece)
@@ -590,6 +589,12 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe 
         self.selected_piece = None
         self.reset_highlight()
 
+    def nom_case(self, row, col):
+        if self.joueur_humain == self.joueur_noir:
+            row = 7 - row
+            col = 7 - col
+
+        return f"{chr(97 + col)}{8 - row}"
     def notation_move(self,piece, to_row, to_col,promotion=None,prise_en_passant=None):
         nota=['','','']            # [préfixe, prise, suffixe]
         adversaire = self.joueur_noir if self.current_player==self.joueur_blanc else self.joueur_blanc
