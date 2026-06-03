@@ -126,13 +126,13 @@ class Cavalier(Piece):
     def __repr__(self):
         return "♘" if self.couleur=='b' else "♞"
 
-    MOVES = [(-2, -1), (-2, 1), (-1, -2), (-1, 2),
+    MOVES_CAVALIER = [(-2, -1), (-2, 1), (-1, -2), (-1, 2),
              (1, -2), (1, 2), (2, -1), (2, 1)]
 
     def cases_accesibles(self, E):
         L = []
         i, j = self.position(E)
-        for di, dj in self.MOVES:  # Utilise l'attribut de classe
+        for di, dj in self.MOVES_CAVALIER:  # Utilise l'attribut de classe
             k, l = i + di, j + dj
             if 0 <= k < 8 and 0 <= l < 8:
                 if E[k][l] is None or E[k][l].couleur != self.couleur:
@@ -143,12 +143,12 @@ class Fou(Piece):
     def __repr__(self):
         return "♗" if self.couleur=='b' else "♝"
 
-    MOVES = [(-1, -1), (-1, 1), (1, -1), (1, 1)]
+    MOVES_FOU = [(-1, -1), (-1, 1), (1, -1), (1, 1)]
 
     def cases_accesibles(self, E):
         L = []
         i, j = self.position(E)
-        for di, dj in self.MOVES:
+        for di, dj in self.MOVES_FOU:
             for k in range(1, 8):  # Parcourt chaque case de la diagonale
                 ni, nj = i + di * k, j + dj * k
                 if 0 <= ni < 8 and 0 <= nj < 8:
@@ -228,40 +228,73 @@ class Roi(Piece):
         return L
 
 class Pion(Piece):
+    def __init__(self, couleur, colonne_depart=None):
+        super().__init__(couleur)
+        self.couleur = couleur
+        self.colonne_depart = colonne_depart
     def __repr__(self):
         return "♙" if self.couleur=='b' else "♟"
 
     def cases_accessibles(self, E):
-        L=[]
-        i,j=self.position(E)
-        if self.couleur=='b':
-            aux=[(i-1,j-1),(i-1,j+1)]
-            for k,l in aux:
+        """
+        Renvoie la liste des cases accessibles pour un pion sur un échiquier donné.
+
+        Paramètres
+        ----------
+        E : list
+            L'échiquier (liste 2D 8x8) sur lequel vérifier les cases accessibles.
+
+        Retourne
+        -------
+        list
+            Une liste de tuples (row, col) représentant les positions accessibles pour le pion.
+            Inclut les cases de capture, les déplacements vers l'avant, et les déplacements de 2 cases depuis la position initiale.
+        """
+        L = []
+        i, j = self.position(E)
+
+        if self.couleur == 'b':  # Pions blancs (se déplacent vers le haut, indices décroissants)
+            # Captures diagonales
+            aux = [(i-1, j-1), (i-1, j+1)]
+            for k, l in aux:
                 try:
                     if E[k][l] is not None and E[k][l].couleur != self.couleur:
-                        L .append((k, l))
+                        L.append((k, l))
                 except IndexError:
                     pass
-            if 0<=i-1<8 and E[i-1][j]==None:
-                L.append((i-1,j))
 
-            if i==6:
-                if 0<=i-2<8 and E[i-2][j]==None:
-                    L.append((i-2,j))
+            # Déplacement vers l'avant d'une case
+            if 0 <= i-1 < 8 and E[i-1][j] is None:
+                L.append((i-1, j))
 
-        else:
-            aux=[(i+1,j-1),(i+1,j+1)]    #cases prenables
-            for k,l in aux:
+            # Déplacement de 2 cases depuis la position initiale (ligne 6 ET colonne de départ)
+            if i == 6 and j == self.colonne_depart:  # ✅ Vérifie la colonne de départ
+                if (0 <= i-2 < 8 and
+                        E[i-1][j] is None and  # Case intermédiaire vide
+                        E[i-2][j] is None):    # Case finale vide
+                    L.append((i-2, j))
+
+        else:  # Pions noirs (se déplacent vers le bas, indices croissants)
+            # Captures diagonales
+            aux = [(i+1, j-1), (i+1, j+1)]
+            for k, l in aux:
                 try:
-                    if E[i+1][j] is not None and E[i+1][j].couleur!=self.couleur:
-                        L .append((k,l))
+                    if E[k][l] is not None and E[k][l].couleur != self.couleur:
+                        L.append((k, l))
                 except IndexError:
                     pass
-            if 0<=i+1<8 and E[i+1][j]==None:
-                L.append((i-1,j))
-            if i==1:
-                if 0<=i+2<8 and E[i+2][j]==None:
-                    L.append((i+2,j))
+
+            # Déplacement vers l'avant d'une case
+            if 0 <= i+1 < 8 and E[i+1][j] is None:
+                L.append((i+1, j))
+
+            # Déplacement de 2 cases depuis la position initiale (ligne 1 ET colonne de départ)
+            if i == 1 and j == self.colonne_depart:  # ✅ Vérifie la colonne de départ
+                if (0 <= i+2 < 8 and
+                        E[i+1][j] is None and  # Case intermédiaire vide
+                        E[i+2][j] is None):    # Case finale vide
+                    L.append((i+2, j))
+
         return L
 
 def liste_pieces(couleur):
@@ -272,9 +305,9 @@ def liste_pieces(couleur):
 Pieces_noires=[T1n,C1n,F1n,Dn,Rn,F2n,C2n,T2n]
 [T1b, C1b, F1b, Db, Rb, F2b, C2b, T2b]=liste_pieces('b')
 Pieces_blanches=[T1b,C1b,F1b,Db,Rb,F2b,C2b,T2b]
-[P1b,P2b,P3b,P4b,P5b,P6b,P7b,P8b]=[Pion('b') for _ in range(8)]
+[P1b,P2b,P3b,P4b,P5b,P6b,P7b,P8b]=[Pion('b',i) for i in range(8)]
 Pions_blancs=[P1b,P2b,P3b,P4b,P5b,P6b,P7b,P8b]
-[P1n,P2n,P3n,P4n,P5n,P6n,P7n,P8n]=[Pion('n') for _ in range(8)]
+[P1n,P2n,P3n,P4n,P5n,P6n,P7n,P8n]=[Pion('n',i) for i in range(8)]
 Pions_noirs=[P1n,P2n,P3n,P4n,P5n,P6n,P7n,P8n]
 
 positions_initiales = {

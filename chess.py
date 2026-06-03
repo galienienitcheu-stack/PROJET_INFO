@@ -149,13 +149,18 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe 
 
         # Retire le flou une fois la partie lancée
         self.setGraphicsEffect(None)
-
         self.selected_piece = None
         # Initialise un échiquier 8x8 vide
         self.board = [[None for _ in range(8)] for _ in range(8)]  #représente l'échiquier et contient toutes les pièces vivantes
         self.joueur_blanc = Joueur('b')
         self.joueur_noir = Joueur('n')
+        self.profondeur_max = 5
+        self.game_over = False
         self.current_player = self.joueur_blanc
+        self.pieces_prises = []
+        self.moved_pieces = []
+        self.pion_avance_de_2_cases = []
+        self.a_bouge = {T1n: False, Rn: False, T2n: False, T1b: False, Rb: False, T2b: False}
         self.setup_board()
         self.move_history = []
         self.show_start_message()  # Message au démarrage
@@ -205,13 +210,9 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe 
             button_name = f"{chr(97 + col)}{8 - row}"  # Ex: "a8" pour (0,0), "h1" pour (7,7)
             button = self.findChild(QtWidgets.QPushButton, button_name)
             if button:
-                button.setText(str(piece))  # Utilise __repr__ de Piece
+                button.setText(piece)  # Utilise __repr__ de Piece
                 button.setStyleSheet("font-size: 24px;")
                 button.clicked.connect(partial(self.on_case_clicked, row, col))
-
-    self.pieces_prises=[]
-    self.moved_pieces=[]
-    self.pion_avance_de_2_cases = []
 
     def on_case_clicked(self, row, col):
         if self.selected_piece is None:  # Premier clic
@@ -287,7 +288,7 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe 
 
         # Gestion de la prise en passant
         m, n = None, None
-        if isinstance(piece, Pion) and self.pion_avance_de_2_cases and self.moved_pieces:
+        if isinstance(piece, Pion) and self.pion_avance_de_2_cases[-1] and self.moved_pieces:
             i, j = piece.position(self.board)
             last_piece = self.moved_pieces[-1]
             last_pos = last_piece.position(self.board)
@@ -326,19 +327,20 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe 
         piece = self.board[from_row][from_col]
         promotion = None
         prise_en_passant = None
+        petit_roque_possible,grand_roque_possible=self.roque_possible(self.current_player)
 
         # Roque
-        if self.petit_roque_possible(self.current_player):
+        if petit_roque_possible:
             R = Rn if self.current_player.couleur == 'n' else Rb
             i, j = R.position(self.board)
             if piece == R and (to_row, to_col) == (i, j + 2):
-                self.petit_roque(self.current_player)
+                self.roque(self.current_player,'petit')
                 return
-        if self.grand_roque_possible(self.current_player):
+        if grand_roque_possible(self.current_player):
             R = Rn if self.current_player.couleur == 'n' else Rb
             i, j = R.position(self.board)
             if piece == R and (to_row, to_col) == (i, j - 2):
-                self.grand_roque(self.current_player)
+                self.roque(self.current_player,'grand')
                 return
 
         # Déplacement normal
@@ -352,6 +354,9 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe 
         prise_en_passant = self.prise_en_passant(piece, to_row, to_col)
         if prise_en_passant:
             self.pieces_prises[-1] = prise_en_passant
+
+        if piece in self.a_bouge:
+            self.a_bouge[piece] = True
 
         # Promotion
         promotion= self.promotion(piece)
@@ -390,103 +395,78 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe 
         if self.current_player == self.joueur_noir:
             QTimer.singleShot(500, self.ia_move)                                          #on rappelle la fonction start_game
 
-    def petit_roque(self, joueur):
+    def roque(self, J, type_roque):
         """
+        Effectue un roque (petit ou grand) pour le joueur J si possible.
 
-        :rtype: None
+        Paramètres
+        ----------
+        J : Joueur
+            Le joueur qui tente de roquer.
+        type_roque : str
+            'petit' ou 'grand' pour spécifier le type de roque.
+
+        Retourne
+        -------
+        bool
+            True si le roque a été effectué, False sinon.
         """
-        from_row, from_col = (0, 4) if joueur.couleur == 'n' else (7, 4)
-        to_row, to_col = (0, 6) if joueur.couleur == 'n' else (7, 6)
-        from_row_tour, from_col_tour = (0, 7) if joueur.couleur == 'n' else (7, 7)
-        to_row_tour, to_col_tour = (0, 5) if joueur.couleur == 'n' else (7, 5)
+        if type_roque == 'petit':
+            roi = Rn if J.couleur == 'n' else Rb
+            tour = Tn2 if J.couleur == 'n' else Tb2
+            direction = 1  # Déplacement vers la droite
+            cases_a_verifier = [(0, 1), (0, 2)]  # Cases entre roi et tour
+        else:  # grand
+            roi = Rn if J.couleur == 'n' else Rb
+            tour = Tn1 if J.couleur == 'n' else Tb1
+            direction = -1  # Déplacement vers la gauche
+            cases_a_verifier = [(0, -1), (0, -2), (0, -3)]  # Cases entre roi et tour
 
-        roi = self.board[from_row][from_col]
-        tour = self.board[from_row_tour][from_col_tour]
+        # Vérifie que le roi et la tour n'ont pas bougé
+        if roi.a_bouge or tour.a_bouge:
+            return False
 
-        # Déplace le roi et la tour
-        self.board[from_row][from_col] = None
-        self.board[to_row][to_col] = roi
-        self.board[from_row_tour][from_col_tour] = None
-        self.board[to_row_tour][to_col_tour] = tour
+        # Vérifie que le roi n'est pas en échec
+        if self.echec(J):
+            return False
 
-        # Met à jour les attributs
-        self.moved_pieces.extend([roi, tour])
-        self.pion_avance_de_2cases(roi, from_row, to_row)
-        self.pion_avance_de_2cases(tour, from_row_tour, to_row_tour)
+        # Vérifie que les cases entre le roi et la tour sont vides
+        i, j = roi.position(self.board)
+        for di, dj in cases_a_verifier:
+            if not (0 <= i + di < 8 and 0 <= j + dj < 8) or self.board[i + di][j + dj] is not None:
+                return False
 
-        # Notation du coup
-        move_notation = "O-O"
-        internal_notation = (move_notation, 'petit', None)
-        self.move_history.append(internal_notation)
-        self.listWidget.addItem(move_notation)
+        # Simule le roque pour vérifier que le roi ne passe pas par une case en échec
+        old_board = copy.deepcopy(self.board)
+        old_roi_pos = (i, j)
+        old_tour_pos = tour.position(self.board)
 
-        # Met à jour l'UI
-        from_button = self.findChild(QtWidgets.QPushButton, f"{chr(97 + from_col)}{8 - from_row}")
-        to_button = self.findChild(QtWidgets.QPushButton, f"{chr(97 + to_col)}{8 - to_row}")
-        from_button_tour = self.findChild(QtWidgets.QPushButton, f"{chr(97 + from_col_tour)}{8 - from_row_tour}")
-        to_button_tour = self.findChild(QtWidgets.QPushButton, f"{chr(97 + to_col_tour)}{8 - to_row_tour}")
+        # Déplace le roi
+        self.board[i][j] = None
+        self.board[i][j + 2 * direction] = roi
 
-        if from_button:
-            from_button.setText("")
-        if to_button:
-            to_button.setText(roi)
-        if from_button_tour:
-            from_button_tour.setText("")
-        if to_button_tour:
-            to_button_tour.setText(tour)
+        # Vérifie que le roi n'est pas en échec après le déplacement
+        if self.echec(J, board=self.board):
+            self.board = old_board
+            return False
+
+        # Déplace la tour
+        self.board[old_tour_pos[0]][old_tour_pos[1]] = None
+        self.board[i][j + direction] = tour
+
+        # Met à jour a_bouge pour le roi et la tour
+        roi.a_bouge = True
+        tour.a_bouge = True
+
+        # Mise à jour de l'UI
+        self.reset_highlight()
+        self.update_ui_after_move(roi, old_roi_pos, (i, j + 2 * direction))
+        self.update_ui_after_move(tour, old_tour_pos, (i, j + direction))
 
         # Changement de joueur
         self.current_player = self.joueur_noir if self.current_player == self.joueur_blanc else self.joueur_blanc
-        self.selected_piece = None
-        self.reset_highlight()
-        to_button.setStyleSheet("background-color: yellow; font-size: 24px;")
 
-    def grand_roque(self, joueur):
-        from_row, from_col = (0, 4) if joueur.couleur == 'n' else (7, 4)
-        to_row, to_col = (0, 2) if joueur.couleur == 'n' else (7, 2)
-        from_row_tour, from_col_tour = (0, 0) if joueur.couleur == 'n' else (7, 0)
-        to_row_tour, to_col_tour = (0, 3) if joueur.couleur == 'n' else (7, 3)
-
-        roi = self.board[from_row][from_col]
-        tour = self.board[from_row_tour][from_col_tour]
-
-        # Déplace le roi et la tour
-        self.board[from_row][from_col] = None
-        self.board[to_row][to_col] = roi
-        self.board[from_row_tour][from_col_tour] = None
-        self.board[to_row_tour][to_col_tour] = tour
-
-        # Met à jour les attributs
-        self.moved_pieces.extend([roi, tour])
-        self.pion_avance_de_2cases(roi, from_row, to_row)
-        self.pion_avance_de_2cases(tour, from_row_tour, to_row_tour)
-
-        # Notation du coup
-        move_notation = "O-O-O"
-        internal_notation = (move_notation, 'grand', None)
-        self.move_history.append(internal_notation)
-        self.listWidget.addItem(move_notation)
-
-        # Met à jour l'UI
-        from_button = self.findChild(QtWidgets.QPushButton, f"{chr(97 + from_col)}{8 - from_row}")
-        to_button = self.findChild(QtWidgets.QPushButton, f"{chr(97 + to_col)}{8 - to_row}")
-        from_button_tour = self.findChild(QtWidgets.QPushButton, f"{chr(97 + from_col_tour)}{8 - from_row_tour}")
-        to_button_tour = self.findChild(QtWidgets.QPushButton, f"{chr(97 + to_col_tour)}{8 - to_row_tour}")
-
-        if from_button:
-            from_button.setText("")
-        if to_button:
-            to_button.setText(roi)
-        if from_button_tour:
-            from_button_tour.setText("")
-        if to_button_tour:
-            to_button_tour.setText(tour)
-
-        # Changement de joueur
-        self.current_player = self.joueur_noir if self.current_player == self.joueur_blanc else self.joueur_blanc
-        self.selected_piece = None
-        self.reset_highlight()
-        to_button.setStyleSheet("background-color: yellow; font-size: 24px;")
+        return True
 
     def pion_avance_de_2cases(self, piece, from_row, to_row):
         if isinstance(piece, Pion):
@@ -607,99 +587,69 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe 
         else:
             return f'{nota[0]}{nota[1]}{chr(97 + to_col)}{8 - to_row}{nota[2]}'          #notation pour les autres pièces
 
-    def petit_roque_possible(self, J):
-        # Vérifie que le roi et la tour n'ont pas bougé
+    def roque_possible(self, J):
+        """
+        Vérifie si un roque (petit ou grand) est possible pour le joueur J.
+
+        Paramètres
+        ----------
+        J : Joueur
+            Le joueur pour lequel vérifier le roque.
+
+        Retourne
+        -------
+        str or bool
+            'petit' si le petit roque est possible,
+            'grand' si le grand roque est possible,
+            False si aucun roque n'est possible.
+        """
+        result=[False,False]
+        # Vérifie le petit roque
         if J.couleur == 'n':
-            roi = Rn
-            tour = Tn2
-            roi_initial = (0, 4)
-            tour_initial = (0, 7)
+            roi_petit = Rn
+            tour_petit = Tn2
+            roi_grand = Rn
+            tour_grand = Tn1
         else:
-            roi = Rb
-            tour = Tb2
-            roi_initial = (7, 4)
-            tour_initial = (7, 7)
+            roi_petit = Rb
+            tour_petit = Tb2
+            roi_grand = Rb
+            tour_grand = Tb1
 
-        # Vérifie que le roi et la tour sont à leurs positions initiales
-        roi_pos = roi.position(self.board)
-        tour_pos = tour.position(self.board)
-        if roi_pos != roi_initial or tour_pos != tour_initial:
-            return False
+        # Vérifie le petit roque
+        if (not roi_petit.a_bouge and not tour_petit.a_bouge and
+                not self.echec(J) and
+                self.board[roi_petit.position(self.board)[0]][roi_petit.position(self.board)[1] + 1] is None and
+                self.board[roi_petit.position(self.board)[0]][roi_petit.position(self.board)[1] + 2] is None):
 
-        # Vérifie que les cases entre le roi et la tour sont vides
-        i, j = roi_pos
-        if self.board[i][j + 1] is not None or self.board[i][j + 2] is not None:
-            return False
-
-        # Vérifie que le roi n'est pas en échec
-        if self.echec(J):
-            return False
-
-        # Simule le roque pour vérifier que le roi ne passe pas par une case en échec
-        # Sauvegarde l'état actuel
-        old_board = [row[:] for row in self.board]
-
-        # Déplace le roi
-        self.board[i][j] = None
-        self.board[i][j + 2] = roi
-
-        # Vérifie que le roi n'est pas en échec après le déplacement
-        if self.echec(J):
-            # Restaure l'état
+            # Simule le roque pour vérifier que le roi ne passe pas par une case en échec
+            old_board = copy.deepcopy(self.board)
+            i, j = roi_petit.position(self.board)
+            self.board[i][j] = None
+            self.board[i][j + 2] = roi_petit
+            if not self.echec(J,self.board):
+                self.board = old_board
+                result[0]='petit'
             self.board = old_board
-            return False
 
-        # Restaure l'état
-        self.board = old_board
-        return True
+        # Vérifie le grand roque
+        if (not roi_grand.a_bouge and not tour_grand.a_bouge and
+                not self.echec(J) and
+                self.board[roi_grand.position(self.board)[0]][roi_grand.position(self.board)[1] - 1] is None and
+                self.board[roi_grand.position(self.board)[0]][roi_grand.position(self.board)[1] - 2] is None and
+                self.board[roi_grand.position(self.board)[0]][roi_grand.position(self.board)[1] - 3] is None):
 
-    def grand_roque_possible(self, J):
-        # Vérifie que le roi et la tour n'ont pas bougé
-        if J.couleur == 'n':
-            roi = Rn
-            tour = Tn1
-            roi_initial = (0, 4)
-            tour_initial = (0, 0)
-        else:
-            roi = Rb
-            tour = Tb1
-            roi_initial = (7, 4)
-            tour_initial = (7, 0)
-
-        # Vérifie que le roi et la tour sont à leurs positions initiales
-        roi_pos = roi.position(self.board)
-        tour_pos = tour.position(self.board)
-        if roi_pos != roi_initial or tour_pos != tour_initial:
-            return False
-
-        # Vérifie que les cases entre le roi et la tour sont vides
-        i, j = roi_pos
-        if (self.board[i][j - 1] is not None or
-                self.board[i][j - 2] is not None or
-                self.board[i][j - 3] is not None):
-            return False
-
-        # Vérifie que le roi n'est pas en échec
-        if self.echec(J):
-            return False
-
-        # Simule le roque pour vérifier que le roi ne passe pas par une case en échec
-        # Sauvegarde l'état actuel
-        old_board = [row[:] for row in self.board]
-
-        # Déplace le roi
-        self.board[i][j] = None
-        self.board[i][j - 2] = roi
-
-        # Vérifie que le roi n'est pas en échec après le déplacement
-        if self.echec(J):
-            # Restaure l'état
+            # Simule le roque pour vérifier que le roi ne passe pas par une case en échec
+            old_board = copy.deepcopy(self.board)
+            i, j = roi_grand.position(self.board)
+            self.board[i][j] = None
+            self.board[i][j - 2] = roi_grand
+            if not self.echec(J, board=self.board):
+                self.board = old_board
+                result[1]='grand'
             self.board = old_board
-            return False
 
-        # Restaure l'état
-        self.board = old_board
-        return True
+        return resultgit
 
     def promotion(self, piece):
         row = piece.position(self.board)[0]
@@ -739,9 +689,6 @@ class ChessGame(QMainWindow, Ui_Jeu_d_echecs):   #Héritage multiple: la classe 
 
     def match_nul(self,J):
         return not self.echec(J) and all([piece.cases_accesibles(self.board) == [] for piece in J.pieces_vivantes(self.board)])
-
-    self.profondeur_max = 5
-    self.game_over=False
 
     def ia_move(self):
         def ia_move(self):
