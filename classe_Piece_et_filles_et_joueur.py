@@ -26,7 +26,7 @@ class Joueur(object):
         return [piece for row in E for piece in row if piece and piece.couleur == self.couleur]
 
 class Piece(metaclass=ABCMeta):
-    def __init__(self,couleur:str):
+    def __init__(self, couleur: str) -> None:
         """
         Créé une pièce.
 
@@ -59,16 +59,25 @@ class Piece(metaclass=ABCMeta):
             for j in range(8):
                 if E[i][j]==self:
                     return i,j
-        return None
+        return (0,0)
+    def est_menacee(self, E):
+        i, j = self.position(E)
+        for x in range(8):
+            for y in range(8):
+                piece = E[x][y]
+                if piece is not None and piece.couleur != self.couleur:
+                    if (i, j) in piece.cases_accessibles(E):
+                        return True
+        return False
     @abstractmethod
-    def cases_accesibles(self, E):
+    def cases_accessibles(self, E):
         pass
 
 class Tour(Piece):
     def __repr__(self):
         return "♖" if self.couleur=='b' else "♜"
 
-    def cases_accesibles(self, E):
+    def cases_accessibles(self, E):
         L = []
         i, j = self.position(E)
 
@@ -129,7 +138,7 @@ class Cavalier(Piece):
     MOVES_CAVALIER = [(-2, -1), (-2, 1), (-1, -2), (-1, 2),
              (1, -2), (1, 2), (2, -1), (2, 1)]
 
-    def cases_accesibles(self, E):
+    def cases_accessibles(self, E):
         L = []
         i, j = self.position(E)
         for di, dj in self.MOVES_CAVALIER:  # Utilise l'attribut de classe
@@ -145,7 +154,7 @@ class Fou(Piece):
 
     MOVES_FOU = [(-1, -1), (-1, 1), (1, -1), (1, 1)]
 
-    def cases_accesibles(self, E):
+    def cases_accessibles(self, E):
         L = []
         i, j = self.position(E)
         for di, dj in self.MOVES_FOU:
@@ -166,7 +175,7 @@ class Dame(Piece):
     def __repr__(self):
         return  "♕" if self.couleur=='b' else "♛"
 
-    def cases_accesibles(self, E):
+    def cases_accessibles(self, E):
         L = []
         i, j = self.position(E)
         # Directions de la Tour (horizontales/verticales)
@@ -201,17 +210,7 @@ class Roi(Piece):
     def __repr__(self):
         return "♔" if self.couleur=='b' else "♚"
 
-    def est_menacee(self, E):
-        i, j = self.position(E)
-        for x in range(8):
-            for y in range(8):
-                piece = E[x][y]
-                if piece and piece.couleur != self.couleur:
-                    if (i, j) in piece.cases_accesibles(E):
-                        return True
-        return False
-
-    def cases_accesibles(self, E):
+    def cases_accessibles(self, E):
         L = []
         i, j = self.position(E)
         moves = [(i + 1, j), (i - 1, j), (i + 1, j + 1), (i, j + 1),
@@ -219,19 +218,15 @@ class Roi(Piece):
         for k, l in moves:
             if 0 <= k < 8 and 0 <= l < 8:
                 if E[k][l] is None or E[k][l].couleur != self.couleur:
-                    # Vérifie que le roi ne se met pas en échec
-                    temp_board = [row[:] for row in E]  # Copie de l'échiquier
-                    temp_board[k][l] = self
-                    temp_board[i][j] = None
-                    if not self.est_menacee(temp_board):
                         L.append((k, l))
         return L
 
 class Pion(Piece):
-    def __init__(self, couleur, colonne_depart=None):
+    def __init__(self, couleur, colonne_depart=None,ligne_depart=None):
         super().__init__(couleur)
         self.couleur = couleur
         self.colonne_depart = colonne_depart
+        self.ligne_depart = ligne_depart
     def __repr__(self):
         return "♙" if self.couleur=='b' else "♟"
 
@@ -253,7 +248,7 @@ class Pion(Piece):
         L = []
         i, j = self.position(E)
 
-        if self.couleur == 'b':  # Pions blancs (se déplacent vers le haut, indices décroissants)
+        if self.ligne_depart == 6:  # Pions bas (se déplacent vers le haut, indices décroissants)
             # Captures diagonales
             aux = [(i-1, j-1), (i-1, j+1)]
             for k, l in aux:
@@ -296,27 +291,6 @@ class Pion(Piece):
                     L.append((i+2, j))
 
         return L
-
-def liste_pieces(couleur):
-    c=couleur
-    return [Tour(c),Cavalier(c),Fou(c),Dame(c),Roi(c),Fou(c),Cavalier(c),Tour(c)]
-
-[T1n,C1n,F1n,Dn,Rn,F2n,C2n,T2n]=liste_pieces('n')
-Pieces_noires=[T1n,C1n,F1n,Dn,Rn,F2n,C2n,T2n]
-[T1b, C1b, F1b, Db, Rb, F2b, C2b, T2b]=liste_pieces('b')
-Pieces_blanches=[T1b,C1b,F1b,Db,Rb,F2b,C2b,T2b]
-[P1b,P2b,P3b,P4b,P5b,P6b,P7b,P8b]=[Pion('b',i) for i in range(8)]
-Pions_blancs=[P1b,P2b,P3b,P4b,P5b,P6b,P7b,P8b]
-[P1n,P2n,P3n,P4n,P5n,P6n,P7n,P8n]=[Pion('n',i) for i in range(8)]
-Pions_noirs=[P1n,P2n,P3n,P4n,P5n,P6n,P7n,P8n]
-
-positions_initiales = {
-    T1n: (0, 0), C1n: (0, 1), F1n: (0, 2), Dn: (0, 3), Rn: (0, 4), F2n: (0, 5), C2n: (0, 6), T2n: (0, 7),
-    P1n: (1, 0), P2n: (1, 1), P3n: (1, 2), P4n: (1, 3), P5n: (1, 4), P6n: (1, 5), P7n: (1, 6), P8n: (1, 7),
-    P1b: (6, 0), P2b: (6, 1), P3b: (6, 2), P4b: (6, 3), P5b: (6, 4), P6b: (6, 5), P7b: (6, 6), P8b: (6, 7),
-    T1b: (7, 0), C1b: (7, 1), F1b: (7, 2), Db: (7, 3), Rb: (7, 4), F2b: (7, 5), C2b: (7, 6), T2b: (7, 7)
-}
-
 
 
 #@static method c'est pour les méthodes indépendantes du self et de la classe
